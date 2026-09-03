@@ -1,8 +1,32 @@
 const fs = require('fs');
 const path = require('path');
 const { spawn, execFile } = require('child_process');
+const browseModule = require('./browse');
 
 const FOCUS_SCRIPT_PATH = path.join(__dirname, 'ps', 'focus-window.ps1');
+
+// Every action that accepts a client-supplied cwd (Resume/Fork/Continue/New
+// Session) must enforce the same folder scoping the New Session picker
+// already promises. This lives here — the module that actually owns process
+// spawning — rather than only in server.js's route handlers, so a future
+// caller of these functions (a new route, a script) can't bypass it by
+// skipping a check that lived one layer up.
+let configuredSettings = null;
+function configure(settings) {
+  configuredSettings = settings;
+}
+function assertCwdAllowed(cwd) {
+  if (!configuredSettings) return; // not configured (e.g. a unit test) — permissive, not a silent bypass in production
+  let real;
+  try {
+    real = fs.realpathSync(cwd);
+  } catch {
+    throw new Error('cwd no longer exists');
+  }
+  if (!browseModule.isWithinAllowedRoots(real, browseModule.allowedRoots(configuredSettings))) {
+    throw new Error('cwd is outside allowed browse roots');
+  }
+}
 
 // If this server process is itself running as a descendant of a Claude Code
 // session (e.g. during development, or if launched from within one), every
@@ -89,17 +113,20 @@ function claudeArgsForNewSession({ name, model, effort }) {
 function resume(sessionId, cwd) {
   if (!isValidSessionId(sessionId)) throw new Error('invalid sessionId');
   if (!isValidCwd(cwd)) throw new Error('cwd no longer exists');
+  assertCwdAllowed(cwd);
   launchInTerminal(`claude --resume ${psQuote(sessionId)}`, cwd);
 }
 
 function fork(sessionId, cwd) {
   if (!isValidSessionId(sessionId)) throw new Error('invalid sessionId');
   if (!isValidCwd(cwd)) throw new Error('cwd no longer exists');
+  assertCwdAllowed(cwd);
   launchInTerminal(`claude --resume ${psQuote(sessionId)} --fork-session`, cwd);
 }
 
 function continueLatest(cwd) {
   if (!isValidCwd(cwd)) throw new Error('cwd no longer exists');
+  assertCwdAllowed(cwd);
   launchInTerminal('claude -c', cwd);
 }
 
@@ -129,6 +156,7 @@ function focusWindow(pid) {
 
 function newSession(cwd, { name, model, effort } = {}) {
   if (!isValidCwd(cwd)) throw new Error('folder does not exist');
+  assertCwdAllowed(cwd);
   const args = claudeArgsForNewSession({ name, model, effort });
   launchInTerminal(`claude ${args}`.trim(), cwd);
 }
@@ -161,6 +189,7 @@ function commandTextNewSession({ name, model, effort }) {
 }
 
 module.exports = {
+  configure,
   isValidSessionId,
   isValidCwd,
   resume,

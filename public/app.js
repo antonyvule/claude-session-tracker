@@ -107,6 +107,20 @@ async function api(url, opts) {
   return body;
 }
 
+// Shared success/failure toast wrapper for the common "fire a PATCH/POST,
+// toast on failure" pattern. Returns undefined (already toasted) on failure
+// so callers that need post-success logic can just check the return value.
+async function apiWithToast(url, opts, errorPrefix, successMessage) {
+  try {
+    const result = await api(url, opts);
+    if (successMessage) toast(successMessage);
+    return result;
+  } catch (err) {
+    toast(`${errorPrefix}: ${err.message}`, true);
+    return undefined;
+  }
+}
+
 // ---------- SSE ----------
 function connectSSE() {
   const es = new EventSource('/events');
@@ -288,15 +302,11 @@ async function handleSessionDrop(e, targetCard) {
   const toIdx = orderedIds.indexOf(targetCard.sessionId);
   orderedIds.splice(toIdx, 0, dragged.sessionId);
 
-  try {
-    await api('/api/sessions/reorder', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ orderedSessionIds: orderedIds }),
-    });
-  } catch (err) {
-    toast(`Failed to reorder: ${err.message}`, true);
-  }
+  await apiWithToast('/api/sessions/reorder', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ orderedSessionIds: orderedIds }),
+  }, 'Failed to reorder');
 }
 
 function renderSessionList() {
@@ -347,20 +357,12 @@ function renderSessionList() {
       headerChildren.push(el('a', { href: url, target: '_blank', text: `#${project.adoTicketId}` }));
     }
     headerChildren.push(el('span', { class: 'priority-btns' }, [
-      el('button', { title: 'Higher priority', text: '↑', onclick: async () => {
-        try {
-          await api('/api/projects/reorder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orderedKeys: movePriority(currentPriorityOrder(), projectKey, -1) }) });
-        } catch (err) {
-          toast(`Failed to reorder project: ${err.message}`, true);
-        }
-      } }),
-      el('button', { title: 'Lower priority', text: '↓', onclick: async () => {
-        try {
-          await api('/api/projects/reorder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orderedKeys: movePriority(currentPriorityOrder(), projectKey, 1) }) });
-        } catch (err) {
-          toast(`Failed to reorder project: ${err.message}`, true);
-        }
-      } }),
+      el('button', { title: 'Higher priority', text: '↑', onclick: () =>
+        apiWithToast('/api/projects/reorder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orderedKeys: movePriority(currentPriorityOrder(), projectKey, -1) }) }, 'Failed to reorder project')
+      }),
+      el('button', { title: 'Lower priority', text: '↓', onclick: () =>
+        apiWithToast('/api/projects/reorder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orderedKeys: movePriority(currentPriorityOrder(), projectKey, 1) }) }, 'Failed to reorder project')
+      }),
     ]));
 
     container.appendChild(el('div', { class: 'project-group' }, [
@@ -387,22 +389,23 @@ function buildStatusSelect(sessionId, card) {
     statusSelect.appendChild(opt);
   }
   statusSelect.addEventListener('change', async () => {
-    try {
-      await api(`/api/sessions/${sessionId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: statusSelect.value, manually_set: true }),
-      });
-      statusSelect.setAttribute('data-status', statusSelect.value);
-    } catch (err) {
-      toast(`Failed to update status: ${err.message}`, true);
-    }
+    const result = await apiWithToast(`/api/sessions/${sessionId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: statusSelect.value, manually_set: true }),
+    }, 'Failed to update status');
+    if (result) statusSelect.setAttribute('data-status', statusSelect.value);
   });
   return statusSelect;
 }
 
+function actionBtnsKey(card) {
+  return JSON.stringify([card.running, card.pid, card.projectKey, card.cwd]);
+}
+
 function buildActionBtns(card) {
   const actionBtns = el('div', { class: 'action-btns' });
+  actionBtns.dataset.key = actionBtnsKey(card);
   if (card.running) {
     actionBtns.appendChild(el('button', { disabled: 'true', text: `Already open (pid ${card.pid})`, title: 'This exact session is already running elsewhere' }));
   } else {
@@ -431,7 +434,12 @@ function updateSelectedDetailHeader() {
   }
 
   const oldActionBtns = document.querySelector('.detail-header .action-btns');
-  if (oldActionBtns) oldActionBtns.replaceWith(buildActionBtns(card));
+  // Rebuilding unconditionally would drop an in-flight click (e.g. a
+  // just-clicked Resume button) on every unrelated SSE patch; only replace
+  // when something the buttons actually depend on changed.
+  if (oldActionBtns && oldActionBtns.dataset.key !== actionBtnsKey(card)) {
+    oldActionBtns.replaceWith(buildActionBtns(card));
+  }
 }
 
 // ---------- Detail pane (right) ----------
@@ -513,23 +521,18 @@ async function selectSession(sessionId) {
   const pinnedCheckbox = el('input', { type: 'checkbox' });
   pinnedCheckbox.checked = Boolean(card.pinned);
 
-  const saveBtn = el('button', { text: 'Save', onclick: async () => {
-    try {
-      await api(`/api/sessions/${sessionId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title_override: titleInput.value || null,
-          notes: notesArea.value,
-          tags: tagsInput.value,
-          pinned: pinnedCheckbox.checked,
-        }),
-      });
-      toast('Saved.');
-    } catch (err) {
-      toast(`Failed to save: ${err.message}`, true);
-    }
-  } });
+  const saveBtn = el('button', { text: 'Save', onclick: () =>
+    apiWithToast(`/api/sessions/${sessionId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title_override: titleInput.value || null,
+        notes: notesArea.value,
+        tags: tagsInput.value,
+        pinned: pinnedCheckbox.checked,
+      }),
+    }, 'Failed to save', 'Saved.')
+  });
 
   footer.appendChild(el('div', { class: 'detail-row' }, [el('label', { text: 'Rename' }), titleInput]));
   footer.appendChild(el('div', { class: 'detail-row' }, [el('label', { text: 'Notes' }), notesArea]));
@@ -573,27 +576,19 @@ async function continueInProject(projectKey, cwd) {
 }
 
 async function runAction(type, card) {
-  try {
-    await api(`/api/actions/${type}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sessionId: card.sessionId, cwd: card.cwd }),
-    });
-  } catch (err) {
-    toast(`Failed to launch: ${err.message}`, true);
-  }
+  await apiWithToast(`/api/actions/${type}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId: card.sessionId, cwd: card.cwd }),
+  }, 'Failed to launch');
 }
 
 async function runProjectAction(type, cwd) {
-  try {
-    await api(`/api/actions/${type}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cwd }),
-    });
-  } catch (err) {
-    toast(`Failed to launch: ${err.message}`, true);
-  }
+  await apiWithToast(`/api/actions/${type}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cwd }),
+  }, 'Failed to launch');
 }
 
 async function copyCommand(type, card) {

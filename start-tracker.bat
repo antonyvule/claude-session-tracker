@@ -6,7 +6,10 @@ set MAXLOGBYTES=10485760
 
 :loop
 if exist "%LOGFILE%" (
-  for %%A in ("%LOGFILE%") do if %%~zA GTR %MAXLOGBYTES% move /y "%LOGFILE%" "%LOGFILE%.old" >nul
+  for %%A in ("%LOGFILE%") do if %%~zA GTR %MAXLOGBYTES% (
+    if exist "%LOGFILE%.old" move /y "%LOGFILE%.old" "%LOGFILE%.old2" >nul
+    move /y "%LOGFILE%" "%LOGFILE%.old" >nul
+  )
 )
 
 for /f %%T in ('powershell -NoProfile -Command "[DateTimeOffset]::UtcNow.ToUnixTimeSeconds()"') do set START=%%T

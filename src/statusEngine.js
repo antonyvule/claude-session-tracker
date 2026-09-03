@@ -42,6 +42,12 @@ function buildBoard(liveMap, staleThresholdHours) {
     // started rather than "now", which would otherwise make it look permanently
     // most-recent (recomputed as literally "now" on every poll tick) regardless
     // of how long it's actually been sitting idle at its first prompt.
+    // Residual edge case: startedAt is still fixed at process launch, not true
+    // last-activity, so a session that's been running a long time but genuinely
+    // idle since startup (no transcript written yet) can still sort as more
+    // recent than it really is until its first transcript line lands. Accepted
+    // rather than falling back to 0/epoch, which would instead mis-flag a
+    // freshly-started session as "Stale" immediately.
     const lastActiveMs = hist ? hist.mtimeMs : (live ? live.startedAt : now) || now;
     const needsAttention = hist ? historyScanner.peekNeedsAttention(hist.filePath) : false;
     const manuallySet = Boolean(dbRow && dbRow.manually_set);

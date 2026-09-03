@@ -47,12 +47,30 @@ app.use(express.json());
 // Reject state-changing requests whose Origin/Referer doesn't match our own
 // origin; requests with no Origin header at all (curl, scripts) are allowed,
 // since that header is browser-only in the first place.
+//
+// Matches the *origin* exactly (scheme + host + port, nothing after), not a
+// string prefix — startsWith would let "http://127.0.0.1:47560" pass a check
+// for port 4756. Both 127.0.0.1 and localhost are accepted since the server
+// binds 127.0.0.1 but a browser may still be pointed at either hostname.
+const ALLOWED_ORIGINS = new Set([
+  `http://127.0.0.1:${settings.port}`,
+  `http://localhost:${settings.port}`,
+]);
 app.use((req, res, next) => {
   if (['POST', 'PATCH', 'PUT', 'DELETE'].includes(req.method)) {
-    const origin = req.get('origin') || req.get('referer');
-    if (origin && !origin.startsWith(`http://127.0.0.1:${settings.port}`)) {
-      res.status(403).json({ error: 'cross-origin request rejected' });
-      return;
+    const originHeader = req.get('origin') || req.get('referer');
+    if (originHeader) {
+      let originOnly;
+      try {
+        originOnly = new URL(originHeader).origin;
+      } catch {
+        res.status(403).json({ error: 'cross-origin request rejected' });
+        return;
+      }
+      if (!ALLOWED_ORIGINS.has(originOnly)) {
+        res.status(403).json({ error: 'cross-origin request rejected' });
+        return;
+      }
     }
   }
   next();
@@ -61,17 +79,9 @@ app.use((req, res, next) => {
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Actions accept a client-supplied cwd (Resume/Fork/Continue/New Session) —
-// enforce the same folder scoping the New Session picker already promises,
-// so an action can't be pointed at an arbitrary directory outside it.
-function isCwdAllowed(cwd) {
-  if (typeof cwd !== 'string') return false;
-  try {
-    const real = fs.realpathSync(cwd);
-    return browseModule.isWithinAllowedRoots(real, browseModule.allowedRoots(settings));
-  } catch {
-    return false;
-  }
-}
+// actions.js enforces the same folder scoping the New Session picker already
+// promises, so an action can't be pointed at an arbitrary directory outside it.
+actions.configure(settings);
 
 let lastCardsById = new Map();
 let lastProjectsJson = '[]';
@@ -223,10 +233,6 @@ app.post('/api/sessions/reorder', (req, res) => {
 
 // --- Actions: spawn a PowerShell window running the relevant claude command ---
 app.post('/api/actions/resume', (req, res) => {
-  if (!isCwdAllowed(req.body.cwd)) {
-    res.status(403).json({ ok: false, error: 'cwd is outside allowed browse roots' });
-    return;
-  }
   try {
     actions.resume(req.body.sessionId, req.body.cwd);
     res.json({ ok: true });
@@ -236,10 +242,6 @@ app.post('/api/actions/resume', (req, res) => {
 });
 
 app.post('/api/actions/fork', (req, res) => {
-  if (!isCwdAllowed(req.body.cwd)) {
-    res.status(403).json({ ok: false, error: 'cwd is outside allowed browse roots' });
-    return;
-  }
   try {
     actions.fork(req.body.sessionId, req.body.cwd);
     res.json({ ok: true });
@@ -249,10 +251,6 @@ app.post('/api/actions/fork', (req, res) => {
 });
 
 app.post('/api/actions/continue', (req, res) => {
-  if (!isCwdAllowed(req.body.cwd)) {
-    res.status(403).json({ ok: false, error: 'cwd is outside allowed browse roots' });
-    return;
-  }
   try {
     actions.continueLatest(req.body.cwd);
     res.json({ ok: true });
@@ -268,10 +266,6 @@ app.post('/api/actions/focus', async (req, res) => {
 
 app.post('/api/actions/new', (req, res) => {
   const { cwd, name, model, effort } = req.body || {};
-  if (!isCwdAllowed(cwd)) {
-    res.status(403).json({ ok: false, error: 'cwd is outside allowed browse roots' });
-    return;
-  }
   try {
     actions.newSession(cwd, { name, model, effort });
     res.json({ ok: true });
