@@ -12,7 +12,16 @@
   <div id="counts"></div>
   <div id="poll-banner" class="hidden"></div>
   <div class="header-actions">
-    <input id="search-input" type="search" placeholder="Search transcripts (/)" />
+    <div class="search-wrap">
+      <input id="search-input" type="search" placeholder="Search transcripts (/)" />
+      <div id="search-results" class="search-dropdown hidden">
+        <div class="panel-header">
+          <h2>Search results</h2>
+          <button class="close-btn" data-close="search-results">&times;</button>
+        </div>
+        <div id="search-results-list"></div>
+      </div>
+    </div>
     <button id="new-session-btn">+ New Session</button>
     <button id="help-btn" title="How this works">?</button>
   </div>
@@ -75,14 +84,6 @@
       <dt>Window focus</dt><dd>All launches open as a new tab in your existing terminal window rather than a separate window, when possible. Bringing a window to the foreground from here is best-effort — Windows restricts background apps from stealing focus, so it can occasionally just select the session here instead of visibly focusing it.</dd>
     </dl>
   </div>
-</div>
-
-<div id="search-results" class="panel hidden">
-  <div class="panel-header">
-    <h2>Search results</h2>
-    <button class="close-btn" data-close="search-results">&times;</button>
-  </div>
-  <div id="search-results-list"></div>
 </div>
 
 <div id="new-session-modal" class="modal hidden">

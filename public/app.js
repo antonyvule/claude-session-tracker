@@ -16,6 +16,11 @@ const STATUS_ICONS = {
 // and Archived are things you're finished with, so they only show when you pick
 // those chips explicitly, never lumped into the default/catch-all view.
 const ACTIVE_STATUSES = ['todo', 'in_progress', 'blocked'];
+// Search result ordering: active work first (In Progress, then Blocked, then To
+// Do), inactive last (Done, then Archived) — a pure client-side sort over
+// already-fetched results using status data already held from the SSE feed, so
+// it costs nothing on the search/ripgrep side.
+const SEARCH_STATUS_ORDER = { in_progress: 0, blocked: 1, todo: 2, done: 3, archived: 4 };
 const FILTER_CHIPS = ['active', 'todo', 'in_progress', 'blocked', 'done', 'archived'];
 const FILTER_LABELS = { active: 'All', ...STATUS_LABELS };
 const FILTER_ICONS = { active: '🗂️', ...STATUS_ICONS };
@@ -243,6 +248,7 @@ function renderCard(card) {
   return el('div', {
     class: isSelected ? 'card selected' : 'card',
     'data-status': card.status,
+    'data-session-id': card.sessionId,
     draggable: 'true',
     onclick: () => selectSession(card.sessionId),
     ondragstart: (e) => {
@@ -364,9 +370,19 @@ function updateSelectedDetailHeader() {
 
 // ---------- Detail pane (right) ----------
 async function selectSession(sessionId) {
+  const card = state.cardsById.get(sessionId);
+  // Selecting a session (e.g. from a search result) whose status the current
+  // filter hides would otherwise update the detail pane while leaving the list
+  // showing no corresponding card at all — switch to the chip that matches it.
+  if (card && !matchesFilter(card)) {
+    state.filter = card.status;
+    localStorage.setItem('sessionFilter', state.filter);
+    renderFilterBar();
+  }
   state.selectedSessionId = sessionId;
   renderSessionList(); // refresh selection highlight
-  const card = state.cardsById.get(sessionId);
+  const cardEl = document.querySelector(`.card[data-session-id="${sessionId}"]`);
+  if (cardEl) cardEl.scrollIntoView({ block: 'nearest' });
   const empty = document.getElementById('detail-empty');
   const body = document.getElementById('detail-body');
   empty.classList.add('hidden');
@@ -637,13 +653,31 @@ async function runSearch(query) {
   if (results.length === 0) {
     list.appendChild(el('div', { class: 'search-result', text: 'No matches.' }));
   }
-  for (const r of results) {
+  const sorted = results.slice().sort((a, b) => {
+    const cardA = state.cardsById.get(a.sessionId);
+    const cardB = state.cardsById.get(b.sessionId);
+    const orderA = cardA ? SEARCH_STATUS_ORDER[cardA.status] ?? 5 : 5;
+    const orderB = cardB ? SEARCH_STATUS_ORDER[cardB.status] ?? 5 : 5;
+    if (orderA !== orderB) return orderA - orderB;
+    return (cardB ? cardB.lastActiveMs : 0) - (cardA ? cardA.lastActiveMs : 0);
+  });
+  for (const r of sorted) {
+    const card = state.cardsById.get(r.sessionId);
+    const name = (card && (card.titleOverride || card.name)) || `session ${r.sessionId.slice(0, 8)}`;
+    const head = [el('div', { class: 'search-result-name', text: name })];
+    if (card) {
+      head.unshift(el('span', {
+        class: 'status-pill',
+        'data-status': card.status,
+        text: `${STATUS_ICONS[card.status]} ${STATUS_LABELS[card.status]}`,
+      }));
+    }
     list.appendChild(el('div', {
       class: 'search-result',
       onclick: () => { panel.classList.add('hidden'); selectSession(r.sessionId); },
     }, [
-      el('div', { text: r.sessionId.slice(0, 8) }),
-      el('div', { text: r.snippet }),
+      el('div', { class: 'search-result-head' }, head),
+      el('div', { class: 'search-result-snippet', text: r.snippet }),
     ]));
   }
 }
@@ -668,6 +702,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   document.querySelectorAll('[data-close]').forEach((btn) => {
     btn.addEventListener('click', () => closePanel(btn.dataset.close));
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.search-wrap')) closePanel('search-results');
   });
 
   let searchTimer = null;
