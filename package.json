@@ -1,0 +1,14 @@
+{
+  "name": "claude-session-tracker",
+  "version": "1.0.0",
+  "description": "Local kanban tracker for Claude Code CLI sessions across projects",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^13.0.3",
+    "chokidar": "^3.6.0",
+    "express": "^4.19.2"
+  }
+}

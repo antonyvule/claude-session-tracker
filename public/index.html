@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Claude Session Tracker</title>
+<link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+<header id="header-strip">
+  <h1>Claude Session Tracker</h1>
+  <div id="counts"></div>
+  <div id="poll-banner" class="hidden"></div>
+  <div class="header-actions">
+    <input id="search-input" type="search" placeholder="Search transcripts (/)" />
+    <button id="new-session-btn">+ New Session</button>
+    <button id="help-btn" title="How this works">?</button>
+  </div>
+</header>
+
+<main id="app-layout">
+  <aside id="session-list-pane">
+    <div id="filter-bar"></div>
+    <div id="session-list"></div>
+  </aside>
+  <section id="detail-pane">
+    <div id="detail-empty" class="empty-state">Select a session to see its content.</div>
+    <div id="detail-body" class="hidden"></div>
+  </section>
+</main>
+
+<div id="help-panel" class="panel hidden">
+  <div class="panel-header">
+    <h2>How this works</h2>
+    <button class="close-btn" data-close="help-panel">&times;</button>
+  </div>
+
+  <div class="help-section">
+    <h3>Statuses</h3>
+    <dl class="help-list">
+      <dt>📝 To Do</dt><dd>Not started or not touched recently; nothing suggests it's active.</dd>
+      <dt>🔄 In Progress</dt><dd>Auto-set whenever the CLI reports the session as live/running. Reverts automatically when it stops running, unless you've manually overridden the status (dragging or picking one yourself marks it "manually set" and the tracker stops auto-managing it).</dd>
+      <dt>🚫 Blocked</dt><dd>Manual only — set this yourself when you're stuck on something and want it to stand out from ordinary To Do work.</dd>
+      <dt>✅ Done</dt><dd>Manual only — never auto-suggested. Set it yourself once work is actually finished.</dd>
+      <dt>🗄️ Archived</dt><dd>Manual only, never auto-suggested. Archiving never touches the underlying transcript file — it's purely a status flag here.</dd>
+    </dl>
+  </div>
+
+  <div class="help-section">
+    <h3>Badges</h3>
+    <dl class="help-list">
+      <dt>Needs You</dt><dd>The last thing that happened in the transcript was the assistant using a tool with no reply after it — usually a pending permission prompt. Doesn't detect a plain question in the text, only this specific "waiting on you" signal.</dd>
+      <dt>Stale</dt><dd>Was In Progress but hasn't been touched past the stale threshold, and running has stopped — flagged only, status stays In Progress. Only In Progress sessions get this; an untouched To Do/Blocked just stays as-is with no auto-flip.</dd>
+      <dt>Pinned</dt><dd>Purely a sort flag, set by you (checkbox in a session's detail pane). A pinned session always sorts to the top of its project group, above Needs You/Stale/manual order. No other effect.</dd>
+      <dt>● live dot</dt><dd>The CLI currently reports this session as running.</dd>
+    </dl>
+  </div>
+
+  <div class="help-section">
+    <h3>Actions</h3>
+    <dl class="help-list">
+      <dt>Resume</dt><dd>Reopens this exact session by its ID. Disabled (shows "Already open") if it's already running — you can't resume a session that's live elsewhere.</dd>
+      <dt>Fork</dt><dd>Same as Resume, but starts a brand-new session from this one's history instead of continuing it — the original session is left completely untouched. Use it to try a different direction without risking what you already have.</dd>
+      <dt>Continue latest in project</dt><dd>Not tied to the session you're viewing — runs Claude Code's own "continue most recent" for that project folder, so it can land on a different, newer session than the one you clicked. If a session in that project is already running, this skips launching anything and tries to focus its window instead (falls back to just selecting it here if the OS blocks the focus switch).</dd>
+      <dt>Copy command</dt><dd>Puts the equivalent CLI command on your clipboard, in case a spawn button misbehaves.</dd>
+      <dt>+ New Session</dt><dd>Pick a known project or browse to a folder, then launches a fresh `claude` there. It won't show up in this list until you send it a first message — Claude Code doesn't create a session record for a still-blank prompt.</dd>
+    </dl>
+  </div>
+
+  <div class="help-section">
+    <h3>Other</h3>
+    <dl class="help-list">
+      <dt>Filters</dt><dd>"All" means all active work (To Do / In Progress / Blocked) — Done and Archived are deliberately excluded from it and only show via their own chips.</dd>
+      <dt>Reordering</dt><dd>Drag a session card onto another card in the same project to set a manual order — it's a tiebreaker only; Needs You/Stale/Pinned still always float to the top. Project groups themselves reorder via the ↑↓ buttons on their header.</dd>
+      <dt>Window focus</dt><dd>All launches open as a new tab in your existing terminal window rather than a separate window, when possible. Bringing a window to the foreground from here is best-effort — Windows restricts background apps from stealing focus, so it can occasionally just select the session here instead of visibly focusing it.</dd>
+    </dl>
+  </div>
+</div>
+
+<div id="search-results" class="panel hidden">
+  <div class="panel-header">
+    <h2>Search results</h2>
+    <button class="close-btn" data-close="search-results">&times;</button>
+  </div>
+  <div id="search-results-list"></div>
+</div>
+
+<div id="new-session-modal" class="modal hidden">
+  <div class="modal-content">
+    <div class="panel-header">
+      <h2>New Session</h2>
+      <button class="close-btn" data-close="new-session-modal">&times;</button>
+    </div>
+    <p class="modal-note">It won't appear in the session list until you send it a first message — Claude Code only creates a session's record at that point, not when the blank prompt opens.</p>
+    <label>Quick pick
+      <select id="ns-quickpick"><option value="">— choose a known project —</option></select>
+    </label>
+    <label>Or browse
+      <div id="ns-browse"></div>
+    </label>
+    <label>Chosen folder
+      <input id="ns-folder" type="text" readonly />
+    </label>
+    <details>
+      <summary>Advanced</summary>
+      <label>Name (-n) <input id="ns-name" type="text" /></label>
+      <label>Model <input id="ns-model" type="text" placeholder="claude-sonnet-5" /></label>
+      <label>Effort <input id="ns-effort" type="text" placeholder="high" /></label>
+    </details>
+    <div class="modal-actions">
+      <button id="ns-launch-btn">Launch</button>
+      <button id="ns-copy-btn">Copy command</button>
+    </div>
+    <pre id="ns-error" class="error hidden"></pre>
+  </div>
+</div>
+
+<script src="/app.js"></script>
+</body>
+</html>
