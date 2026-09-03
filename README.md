@@ -1,4 +1,8 @@
-# Claude Session Tracker
+# 🗂️ Claude Session Tracker
+
+![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
+![Platform: Windows](https://img.shields.io/badge/platform-Windows-0078D6.svg)
+![No framework](https://img.shields.io/badge/frontend-no%20framework-informational.svg)
 
 A local dashboard for tracking Claude Code CLI sessions across every project on this
 machine — status, notes, tags, priority, and a "needs you" flag that Claude Code's own
@@ -10,24 +14,24 @@ It's a plain Node/Express server + a no-framework browser UI, not a desktop app.
 server is the only thing resident all the time (tens of MB RAM, near-zero idle CPU);
 the browser tab costs nothing extra since a browser is already running anyway.
 
-## Table of contents
+## 📚 Table of contents
 
-- [Features](#features)
-- [Requirements](#requirements)
-- [Installation](#installation)
-- [Configuration](#configuration)
-- [Running continuously](#running-continuously)
-- [Architecture](#architecture)
-- [Project structure](#project-structure)
-- [API reference](#api-reference)
-- [Data sources](#data-sources)
-- [Data model](#data-model)
-- [Known limitations](#known-limitations)
-- [Troubleshooting](#troubleshooting)
-- [Non-goals](#non-goals)
-- [License](#license)
+- [✨ Features](#-features)
+- [🧩 Requirements](#-requirements)
+- [⚙️ Installation](#️-installation)
+- [🔧 Configuration](#-configuration)
+- [🔁 Running continuously](#-running-continuously)
+- [🏗️ Architecture](#️-architecture)
+- [📁 Project structure](#-project-structure)
+- [🔌 API reference](#-api-reference)
+- [📡 Data sources](#-data-sources)
+- [🗄️ Data model](#️-data-model)
+- [⚠️ Known limitations](#️-known-limitations)
+- [🛠️ Troubleshooting](#️-troubleshooting)
+- [🚫 Non-goals](#-non-goals)
+- [📄 License](#-license)
 
-## Features
+## ✨ Features
 
 **Session list (left pane)**
 - Grouped by project, each group showing a display name, an optional linked ADO
@@ -55,40 +59,47 @@ the browser tab costs nothing extra since a browser is already running anyway.
   your messages (🧑 You) from Claude's (🤖 Claude).
 - **Status** dropdown — picking one here marks the session "manually set" so the
   tracker stops auto-managing its status.
-- **Resume** — reopen this exact session (disabled, shows "Already open (pid N)", if
-  it's already running elsewhere).
-- **Fork** — start a brand-new session from this one's history, leaving this session
-  untouched.
-- **Continue latest in project** — not tied to the session you're viewing; runs
+- **▶️ Resume** — reopen this exact session (disabled, shows "Already open (pid N)",
+  if it's already running elsewhere).
+- **🍴 Fork** — start a brand-new session from this one's history, leaving this
+  session untouched.
+- **⏭️ Continue latest in project** — not tied to the session you're viewing; runs
   Claude Code's own "continue most recent" for that project folder, so it can land on
   a different, newer session. If a session in that project is already running, this
   skips launching anything and tries to bring its window to the foreground instead
   (falls back to just selecting it here if the OS blocks the focus switch).
-- **Copy command** — puts the equivalent CLI command on the clipboard as a fallback.
+- **📋 Copy command** — puts the equivalent CLI command on the clipboard as a
+  fallback.
 - Every launch action opens as a new tab in your existing terminal window rather than
   a separate window, where possible (falls back to a new window if Windows Terminal
   isn't installed).
 
-**+ New Session** — pick a known project or browse to a folder (scoped to configured
+**➕ New Session** — pick a known project or browse to a folder (scoped to configured
 allowed roots + your home folder), optional name/model/effort override, then launches
 a fresh `claude` there. It won't appear in the list until you send it a first message
-— see [Known limitations](#known-limitations).
+— see [⚠️ Known limitations](#️-known-limitations).
 
-**Search** — ripgrep-backed full-text search across all transcripts (`/` to focus it).
+**🔎 Search** — ripgrep-backed full-text search across all transcripts (`/` to focus
+it), shown in a dropdown under the search box rather than a panel that covers the
+page. Results are one per session (not one per matching line — clicking any result
+opens the same transcript regardless), each tagged with that session's status pill,
+sorted active-first (In Progress → Blocked → To Do → Done → Archived, then recency).
+Selecting a result also switches the list's filter chip and scrolls to the matching
+card if needed, the same as selecting it manually.
 
-**Theme** — dark blue by default (drawn from a shared design reference), with a
+**🎨 Theme** — dark blue by default (drawn from a shared design reference), with a
 lighter variant for anyone whose OS prefers light mode.
 
-**Keyboard shortcuts** — `/` focuses search; `Esc` closes whichever overlay
+**⌨️ Keyboard shortcuts** — `/` focuses search; `Esc` closes whichever overlay
 (search results, New Session, Help) is open.
 
-## Requirements
+## 🧩 Requirements
 
 - **Windows** — the terminal-spawning and window-focus mechanisms are all
   PowerShell/Win32-specific; this has not been adapted for macOS/Linux.
 - **Node.js** — tested on Node 24. No hard minimum is enforced; `better-sqlite3`
   needs either a prebuilt binary for your Node version or a C++ toolchain to build
-  from source (see [Troubleshooting](#troubleshooting)).
+  from source (see [🛠️ Troubleshooting](#️-troubleshooting)).
 - **Claude Code CLI** (`claude`) on PATH — this tool is a dashboard on top of it, not
   a replacement.
 - **Git** on PATH — used for the per-card branch display (`git branch
@@ -99,7 +110,7 @@ lighter variant for anyone whose OS prefers light mode.
 - **ripgrep** (`rg`) on PATH — optional; only the Search feature needs it. Without
   it, search reports itself unavailable rather than failing the whole app.
 
-## Installation
+## ⚙️ Installation
 
 ```bash
 cd C:\GitHub\claude-session-tracker
@@ -107,13 +118,13 @@ npm install
 node server.js
 ```
 
-Open http://127.0.0.1:4756 (port is configurable — see [Configuration](#configuration)).
+Open http://127.0.0.1:4756 (port is configurable — see [🔧 Configuration](#-configuration)).
 
 `better-sqlite3` ships a prebuilt binary for most Node versions. If `npm install`
 reports a missing binding at startup, run `npm rebuild better-sqlite3` — this requires
 a C++ toolchain (Visual Studio Build Tools) if no prebuild matches your Node version.
 
-## Configuration
+## 🔧 Configuration
 
 Edited by hand in `config/settings.json` (no UI for this yet — restart the server
 after changing it):
@@ -122,12 +133,12 @@ after changing it):
 |---|---|---|
 | `port` | `4756` | Port the server listens on (bound to `127.0.0.1` only). |
 | `pollIntervalMs` | `4000` | How often `claude agents --json --all` is polled for live session status. |
-| `staleThresholdHours` | `24` | How long a session can go untouched before it's eligible for the Stale badge (In Progress) or simply left alone (To Do/Blocked) — see [Features](#features). |
+| `staleThresholdHours` | `24` | How long a session can go untouched before it's eligible for the Stale badge (In Progress) or simply left alone (To Do/Blocked) — see [✨ Features](#-features). |
 | `allowedBrowseRoots` | `["C:\\GitHub"]` | Folders the New Session directory browser is allowed to look inside, in addition to your home folder. |
 | `ado.org`, `ado.project` | `""`, `""` | Azure DevOps org/project used to build the `#<ticket>` link on a project header. Link-out only — nothing is fetched from ADO. |
 | `ignoredProjects` | `[]` | Present in the default file but **not currently wired up anywhere in the code — has no effect.** To actually ignore a project, use its `ignored` flag directly via `PATCH /api/projects/:projectKey` (no UI control for this yet either). |
 
-## Running continuously
+## 🔁 Running continuously
 
 Pick one:
 
@@ -149,22 +160,23 @@ nssm start ClaudeSessionTracker
 
 Either way, check `GET /api/health` to confirm it's up.
 
-## Architecture
+## 🏗️ Architecture
 
 - **Backend**: Node.js + Express, single process, no build step. `better-sqlite3` for
   the status/notes/tags/priority database; `chokidar` for live transcript-file
   detection (native event mode, with a periodic full re-scan as a safety net — see
-  [Data sources](#data-sources)); Server-Sent Events (`/events`) push updates to the
-  browser, so the client never polls.
+  [📡 Data sources](#-data-sources)); Server-Sent Events (`/events`) push updates to
+  the browser, so the client never polls.
 - **Frontend**: plain HTML/CSS/JS in `public/` — no framework, no bundler, no build
   step. A small hand-written markdown renderer handles transcript formatting (not a
   library — kept dependency-free and fully offline).
 - **External processes shelled out to**: `claude` (the CLI itself), `git` (branch
   lookup), `wt.exe`/`powershell.exe` (spawning sessions), `rg` (search).
-- **No framework dependency beyond**: `express`, `better-sqlite3`, `chokidar`
-  (`package.json` has no others).
+- **Dependencies**: `express`, `better-sqlite3`, `chokidar` — nothing else. The
+  transitive `qs` (pulled in by Express) is pinned via an `overrides` entry in
+  `package.json` to a patched version; see the commit history for why.
 
-## Project structure
+## 📁 Project structure
 
 ```
 claude-session-tracker/
@@ -194,7 +206,7 @@ claude-session-tracker/
     └── styles.css                 # theme + layout
 ```
 
-## API reference
+## 🔌 API reference
 
 All routes are unauthenticated and bound to `127.0.0.1` only.
 
@@ -218,7 +230,7 @@ All routes are unauthenticated and bound to `127.0.0.1` only.
 | POST | `/api/actions/new` | Spawn a fresh `claude` session in a chosen folder. |
 | GET | `/api/actions/command` | Return the plain-text CLI command for the "copy command" fallback. |
 
-## Data sources
+## 📡 Data sources
 
 - **Live sessions** — `claude agents --json --all`, polled every `pollIntervalMs`
   (default 4s) and diffed before anything is pushed to the browser. This is the source
@@ -241,15 +253,15 @@ All routes are unauthenticated and bound to `127.0.0.1` only.
 - **Project real paths** — never reverse-engineered from the `<slug>` directory name
   (folder names can contain literal dashes, which makes slug→path ambiguous). The real
   `cwd` is always read from the transcript content itself.
-- **Subagent (Task-tool) runs are excluded on purpose.** These get their own
-  transcript nested under the parent session
+- **Subagent (Task-tool) runs are excluded on purpose** from both the board and
+  search. These get their own transcript nested under the parent session
   (`<slug>/<parentSessionId>/subagents/agent-<id>.jsonl`, confirmed by direct
-  inspection). They're filtered out of both the file scanner and the chokidar
-  watcher — without that, the watcher's recursive glob would otherwise pick them up
-  and list a subagent run as if it were its own top-level session, one you never
+  inspection). They're filtered out of the file scanner, the chokidar watcher, and
+  the ripgrep search glob — without that, a recursive scan/watch would otherwise
+  surface a subagent run as if it were its own top-level session, one you never
   interact with directly and can't act on.
 
-## Data model
+## 🗄️ Data model
 
 SQLite (`data/tracker.db`, gitignored) holds two tables:
 - `sessions` — status, notes, tags, pin, manual-order index (drag-to-reorder within a
@@ -268,7 +280,7 @@ during development) — without it, a launched session silently disables its own
 transcript saving (`CLAUDE_CODE_CHILD_SESSION` inherited from the parent), so it would
 run fine but never show up here. Verified directly against the actual CLI warning.
 
-## Known limitations
+## ⚠️ Known limitations
 
 - **A freshly-launched "New Session" doesn't appear until you send it a first
   message.** Verified directly: a bare, still-blank `claude` prompt creates no
@@ -310,7 +322,7 @@ run fine but never show up here. Verified directly against the actual CLI warnin
   there. Either way, the session is also selected in the tracker itself as a reliable
   fallback.
 
-## Troubleshooting
+## 🛠️ Troubleshooting
 
 - **`npm install` / startup fails with a missing `better-sqlite3` binding** — run
   `npm rebuild better-sqlite3`. If that fails too, install the Visual Studio Build
@@ -325,7 +337,7 @@ run fine but never show up here. Verified directly against the actual CLI warnin
   BurntSushi.ripgrep.MSVC` or `choco install ripgrep`) and make sure `rg` is on PATH.
   Everything else in the app works without it.
 - **A session's detail pane says "No transcript on disk yet" for a session you've
-  clearly used** — see the [Data sources](#data-sources) note on the chokidar
+  clearly used** — see the [📡 Data sources](#-data-sources) note on the chokidar
   watcher; it should self-heal within about a minute via the periodic re-scan. If it
   doesn't, restart the server.
 - **A Resume/Fork/New Session window opens and then vanishes within seconds** — this
@@ -336,9 +348,9 @@ run fine but never show up here. Verified directly against the actual CLI warnin
   problem.
 - **New Session / Resume launches but doesn't show up, and you never see a "Transcript
   saving is off" warning** — check that `CLAUDE_CODE_FORCE_SESSION_PERSISTENCE=1` is
-  actually reaching the child process; see the note under [Data model](#data-model).
+  actually reaching the child process; see the note under [🗄️ Data model](#️-data-model).
 
-## Non-goals
+## 🚫 Non-goals
 
 - No Electron/Tauri or any bundled-browser desktop shell.
 - No talking to `~/.claude/daemon/` internals — `claude agents --json` is the supported
@@ -348,7 +360,8 @@ run fine but never show up here. Verified directly against the actual CLI warnin
 - No OS-level tray notification without a browser tab open.
 - No auto-fetch of ADO ticket data, no export/reporting, no command palette.
 
-## License
+## 📄 License
 
-Personal/internal tool — no license file included. Add one (e.g. MIT) if this ever
-leaves this machine or gets shared beyond personal use.
+[MIT](./LICENSE) — free to use, modify, and distribute, including commercially, as
+long as the copyright notice is kept. See the [`LICENSE`](./LICENSE) file for the
+full text.
