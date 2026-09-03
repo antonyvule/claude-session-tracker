@@ -5,8 +5,16 @@ const Database = require('better-sqlite3');
 const DATA_DIR = path.join(__dirname, '..', 'data');
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
-const db = new Database(path.join(DATA_DIR, 'tracker.db'));
-db.pragma('journal_mode = WAL');
+const DB_PATH = path.join(DATA_DIR, 'tracker.db');
+let db;
+try {
+  db = new Database(DB_PATH);
+  db.pragma('journal_mode = WAL');
+} catch (err) {
+  console.error(`[db] failed to open ${DB_PATH}: ${err.message}`);
+  console.error('[db] if this file is corrupted, move or delete it to start fresh (you will lose saved statuses/notes/tags); if another process has it locked, close that process first.');
+  process.exit(1);
+}
 
 const CURRENT_SCHEMA_VERSION = 2;
 const userVersion = db.pragma('user_version', { simple: true });
@@ -98,10 +106,6 @@ function patchSession(sessionId, patch) {
   return getSession(sessionId);
 }
 
-function touchSessionSeenRunning(sessionId) {
-  db.prepare('UPDATE sessions SET last_seen_running_at = ? WHERE session_id = ?').run(Date.now(), sessionId);
-}
-
 function listProjects() {
   return db.prepare('SELECT * FROM projects').all();
 }
@@ -169,7 +173,6 @@ module.exports = {
   getSession,
   listSessions,
   patchSession,
-  touchSessionSeenRunning,
   listProjects,
   getProject,
   patchProject,

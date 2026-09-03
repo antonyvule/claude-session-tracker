@@ -64,4 +64,4 @@ function browse(req, res, settings) {
   }
 }
 
-module.exports = { browse };
+module.exports = { browse, allowedRoots, isWithinAllowedRoots };

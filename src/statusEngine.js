@@ -37,7 +37,12 @@ function buildBoard(liveMap, staleThresholdHours) {
     }
 
     const running = Boolean(live);
-    const lastActiveMs = hist ? hist.mtimeMs : now;
+    // A running session with no transcript file yet (brand new, nothing typed)
+    // has no real activity timestamp — fall back to when the process actually
+    // started rather than "now", which would otherwise make it look permanently
+    // most-recent (recomputed as literally "now" on every poll tick) regardless
+    // of how long it's actually been sitting idle at its first prompt.
+    const lastActiveMs = hist ? hist.mtimeMs : (live ? live.startedAt : now) || now;
     const needsAttention = hist ? historyScanner.peekNeedsAttention(hist.filePath) : false;
     const manuallySet = Boolean(dbRow && dbRow.manually_set);
 

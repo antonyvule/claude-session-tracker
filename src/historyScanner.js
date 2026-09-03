@@ -291,7 +291,13 @@ function watchProjects({ onChange, rescanIntervalMs = 60000 }) {
   const debounceTimers = new Map();
   const debounced = (filePath, fn) => {
     clearTimeout(debounceTimers.get(filePath));
-    debounceTimers.set(filePath, setTimeout(fn, 500));
+    debounceTimers.set(
+      filePath,
+      setTimeout(() => {
+        debounceTimers.delete(filePath); // otherwise every distinct file ever seen leaks an entry forever
+        fn();
+      }, 500)
+    );
   };
 
   const watcher = chokidar.watch(path.join(PROJECTS_DIR, '**', '*.jsonl'), {

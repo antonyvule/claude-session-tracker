@@ -2,18 +2,6 @@ const path = require('path');
 const { execFile } = require('child_process');
 const { PROJECTS_DIR, extractText } = require('./historyScanner');
 
-let ripgrepAvailable = null;
-
-function checkRipgrepAvailable() {
-  if (ripgrepAvailable !== null) return Promise.resolve(ripgrepAvailable);
-  return new Promise((resolve) => {
-    execFile('rg', ['--version'], { windowsHide: true, timeout: 5000 }, (err) => {
-      ripgrepAvailable = !err;
-      resolve(ripgrepAvailable);
-    });
-  });
-}
-
 // Returns null (not a raw-JSON fallback) when the matched line isn't real
 // conversational text — a tool_result payload, queue-operation metadata, etc.
 // Those matches get dropped entirely rather than shown as unreadable JSON dumps.
@@ -32,10 +20,6 @@ function snippetFromLine(rawLine) {
 // Query reaches ripgrep as a single argv element (execFile, no shell) — never
 // interpolated into a shell string — so it cannot break out into another command.
 async function searchTranscripts(query) {
-  const available = await checkRipgrepAvailable();
-  if (!available) {
-    return { ok: false, error: 'ripgrep (rg) is not installed or not on PATH', results: [] };
-  }
   return new Promise((resolve) => {
     execFile(
       'rg',
@@ -48,6 +32,13 @@ async function searchTranscripts(query) {
       ['-n', '--no-heading', '-i', '-m', '5', '--glob', '!**/subagents/**', '--', query, PROJECTS_DIR],
       { windowsHide: true, timeout: 15000, maxBuffer: 20 * 1024 * 1024 },
       (err, stdout) => {
+        // Checked per-call rather than cached forever — a cached "unavailable"
+        // would otherwise survive installing ripgrep without a server restart
+        // (hit directly during this project's own development).
+        if (err && err.code === 'ENOENT') {
+          resolve({ ok: false, error: 'ripgrep (rg) is not installed or not on PATH', results: [] });
+          return;
+        }
         if (err && err.code !== 1) {
           // rg exits 1 for "no matches", which is not a failure
           resolve({ ok: false, error: err.message, results: [] });
@@ -79,4 +70,4 @@ async function searchTranscripts(query) {
   });
 }
 
-module.exports = { checkRipgrepAvailable, searchTranscripts };
+module.exports = { searchTranscripts };

@@ -288,11 +288,15 @@ async function handleSessionDrop(e, targetCard) {
   const toIdx = orderedIds.indexOf(targetCard.sessionId);
   orderedIds.splice(toIdx, 0, dragged.sessionId);
 
-  await api('/api/sessions/reorder', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ orderedSessionIds: orderedIds }),
-  });
+  try {
+    await api('/api/sessions/reorder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderedSessionIds: orderedIds }),
+    });
+  } catch (err) {
+    toast(`Failed to reorder: ${err.message}`, true);
+  }
 }
 
 function renderSessionList() {
@@ -344,10 +348,18 @@ function renderSessionList() {
     }
     headerChildren.push(el('span', { class: 'priority-btns' }, [
       el('button', { title: 'Higher priority', text: '↑', onclick: async () => {
-        await api('/api/projects/reorder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orderedKeys: movePriority(currentPriorityOrder(), projectKey, -1) }) });
+        try {
+          await api('/api/projects/reorder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orderedKeys: movePriority(currentPriorityOrder(), projectKey, -1) }) });
+        } catch (err) {
+          toast(`Failed to reorder project: ${err.message}`, true);
+        }
       } }),
       el('button', { title: 'Lower priority', text: '↓', onclick: async () => {
-        await api('/api/projects/reorder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orderedKeys: movePriority(currentPriorityOrder(), projectKey, 1) }) });
+        try {
+          await api('/api/projects/reorder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orderedKeys: movePriority(currentPriorityOrder(), projectKey, 1) }) });
+        } catch (err) {
+          toast(`Failed to reorder project: ${err.message}`, true);
+        }
       } }),
     ]));
 
@@ -362,10 +374,64 @@ function renderSessionList() {
   }
 }
 
+// Shared by the initial detail-pane render and the live SSE-driven patch below,
+// so a session's status control and action buttons never go stale while its
+// detail pane stays open (e.g. it starts running elsewhere) without needing a
+// full re-render that would also reset the transcript scroll position and any
+// unsaved notes/tags/rename edits.
+function buildStatusSelect(sessionId, card) {
+  const statusSelect = el('select', { class: 'status-select', 'data-status': card.status, title: 'Picking a status here marks it as manually set, so the tracker stops auto-managing it' });
+  for (const s of Object.keys(STATUS_LABELS)) {
+    const opt = el('option', { value: s, text: `${STATUS_ICONS[s]} ${STATUS_LABELS[s]}` });
+    if (s === card.status) opt.selected = true;
+    statusSelect.appendChild(opt);
+  }
+  statusSelect.addEventListener('change', async () => {
+    try {
+      await api(`/api/sessions/${sessionId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: statusSelect.value, manually_set: true }),
+      });
+      statusSelect.setAttribute('data-status', statusSelect.value);
+    } catch (err) {
+      toast(`Failed to update status: ${err.message}`, true);
+    }
+  });
+  return statusSelect;
+}
+
+function buildActionBtns(card) {
+  const actionBtns = el('div', { class: 'action-btns' });
+  if (card.running) {
+    actionBtns.appendChild(el('button', { disabled: 'true', text: `Already open (pid ${card.pid})`, title: 'This exact session is already running elsewhere' }));
+  } else {
+    actionBtns.appendChild(el('button', { text: 'Resume', title: 'Reopen this exact session', onclick: () => runAction('resume', card) }));
+  }
+  actionBtns.appendChild(el('button', { text: 'Fork', title: 'Start a new session from this history, leaving this session untouched', onclick: () => runAction('fork', card) }));
+  actionBtns.appendChild(el('button', { text: 'Continue latest in project', title: "Runs Claude Code's own \"continue most recent\" for this project — may land on a different session than this one", onclick: () => continueInProject(card.projectKey, card.cwd) }));
+  actionBtns.appendChild(el('button', { text: 'Copy command', title: 'Copy the equivalent CLI command to your clipboard', onclick: () => copyCommand(card.running ? 'fork' : 'resume', card) }));
+  return actionBtns;
+}
+
 function updateSelectedDetailHeader() {
   const card = state.cardsById.get(state.selectedSessionId);
+  if (!card) return;
   const titleEl = document.getElementById('detail-title-text');
-  if (card && titleEl) titleEl.textContent = card.titleOverride || card.name || state.selectedSessionId;
+  if (titleEl) titleEl.textContent = card.titleOverride || card.name || state.selectedSessionId;
+
+  const statusRow = document.querySelector('.detail-header .status-row');
+  if (statusRow) {
+    const existing = statusRow.querySelector('.status-select');
+    // Don't yank the dropdown away while the user has it open/focused.
+    if (!existing || document.activeElement !== existing) {
+      if (existing) existing.remove();
+      statusRow.appendChild(buildStatusSelect(state.selectedSessionId, card));
+    }
+  }
+
+  const oldActionBtns = document.querySelector('.detail-header .action-btns');
+  if (oldActionBtns) oldActionBtns.replaceWith(buildActionBtns(card));
 }
 
 // ---------- Detail pane (right) ----------
@@ -402,22 +468,8 @@ async function selectSession(sessionId) {
   const header = el('div', { class: 'detail-header' });
   header.appendChild(el('h2', { id: 'detail-title-text', text: card.titleOverride || card.name || sessionId }));
 
-  const statusRow = el('div', { class: 'detail-row' }, [el('label', { text: 'Status' })]);
-  const statusSelect = el('select', { class: 'status-select', 'data-status': card.status, title: 'Picking a status here marks it as manually set, so the tracker stops auto-managing it' });
-  for (const s of Object.keys(STATUS_LABELS)) {
-    const opt = el('option', { value: s, text: `${STATUS_ICONS[s]} ${STATUS_LABELS[s]}` });
-    if (s === card.status) opt.selected = true;
-    statusSelect.appendChild(opt);
-  }
-  statusSelect.addEventListener('change', async () => {
-    await api(`/api/sessions/${sessionId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: statusSelect.value, manually_set: true }),
-    });
-    statusSelect.setAttribute('data-status', statusSelect.value);
-  });
-  statusRow.appendChild(statusSelect);
+  const statusRow = el('div', { class: 'detail-row status-row' }, [el('label', { text: 'Status' })]);
+  statusRow.appendChild(buildStatusSelect(sessionId, card));
   header.appendChild(statusRow);
 
   header.appendChild(el('div', { class: 'detail-row' }, [
@@ -425,16 +477,7 @@ async function selectSession(sessionId) {
     el('div', { text: card.cwd }),
   ]));
 
-  const actionBtns = el('div', { class: 'action-btns' });
-  if (card.running) {
-    actionBtns.appendChild(el('button', { disabled: 'true', text: `Already open (pid ${card.pid})`, title: 'This exact session is already running elsewhere' }));
-  } else {
-    actionBtns.appendChild(el('button', { text: 'Resume', title: 'Reopen this exact session', onclick: () => runAction('resume', card) }));
-  }
-  actionBtns.appendChild(el('button', { text: 'Fork', title: 'Start a new session from this history, leaving this session untouched', onclick: () => runAction('fork', card) }));
-  actionBtns.appendChild(el('button', { text: 'Continue latest in project', title: "Runs Claude Code's own \"continue most recent\" for this project — may land on a different session than this one", onclick: () => continueInProject(card.projectKey, card.cwd) }));
-  actionBtns.appendChild(el('button', { text: 'Copy command', title: 'Copy the equivalent CLI command to your clipboard', onclick: () => copyCommand(card.running ? 'fork' : 'resume', card) }));
-  header.appendChild(actionBtns);
+  header.appendChild(buildActionBtns(card));
 
   if (detail) {
     header.appendChild(el('div', { class: 'detail-row' }, [
@@ -471,16 +514,21 @@ async function selectSession(sessionId) {
   pinnedCheckbox.checked = Boolean(card.pinned);
 
   const saveBtn = el('button', { text: 'Save', onclick: async () => {
-    await api(`/api/sessions/${sessionId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        title_override: titleInput.value || null,
-        notes: notesArea.value,
-        tags: tagsInput.value,
-        pinned: pinnedCheckbox.checked,
-      }),
-    });
+    try {
+      await api(`/api/sessions/${sessionId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title_override: titleInput.value || null,
+          notes: notesArea.value,
+          tags: tagsInput.value,
+          pinned: pinnedCheckbox.checked,
+        }),
+      });
+      toast('Saved.');
+    } catch (err) {
+      toast(`Failed to save: ${err.message}`, true);
+    }
   } });
 
   footer.appendChild(el('div', { class: 'detail-row' }, [el('label', { text: 'Rename' }), titleInput]));

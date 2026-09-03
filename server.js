@@ -26,7 +26,12 @@ const DEFAULT_SETTINGS = {
 function loadSettings() {
   try {
     return { ...DEFAULT_SETTINGS, ...JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf8')) };
-  } catch {
+  } catch (err) {
+    if (err.code !== 'ENOENT') {
+      // Missing file is normal (first run); anything else (bad JSON, permissions)
+      // means the user's edit was silently ignored, which they should know about.
+      console.error(`[settings] failed to load ${SETTINGS_PATH}, using defaults: ${err.message}`);
+    }
     return DEFAULT_SETTINGS;
   }
 }
@@ -35,7 +40,38 @@ const settings = loadSettings();
 
 const app = express();
 app.use(express.json());
+
+// No auth is intentional (single-user localhost tool), but that's distinct from
+// CSRF: a browser still *sends* a cross-origin POST/PATCH to 127.0.0.1 even
+// without CORS headers (same-origin policy only blocks reading the response).
+// Reject state-changing requests whose Origin/Referer doesn't match our own
+// origin; requests with no Origin header at all (curl, scripts) are allowed,
+// since that header is browser-only in the first place.
+app.use((req, res, next) => {
+  if (['POST', 'PATCH', 'PUT', 'DELETE'].includes(req.method)) {
+    const origin = req.get('origin') || req.get('referer');
+    if (origin && !origin.startsWith(`http://127.0.0.1:${settings.port}`)) {
+      res.status(403).json({ error: 'cross-origin request rejected' });
+      return;
+    }
+  }
+  next();
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Actions accept a client-supplied cwd (Resume/Fork/Continue/New Session) —
+// enforce the same folder scoping the New Session picker already promises,
+// so an action can't be pointed at an arbitrary directory outside it.
+function isCwdAllowed(cwd) {
+  if (typeof cwd !== 'string') return false;
+  try {
+    const real = fs.realpathSync(cwd);
+    return browseModule.isWithinAllowedRoots(real, browseModule.allowedRoots(settings));
+  } catch {
+    return false;
+  }
+}
 
 let lastCardsById = new Map();
 let lastProjectsJson = '[]';
@@ -187,6 +223,10 @@ app.post('/api/sessions/reorder', (req, res) => {
 
 // --- Actions: spawn a PowerShell window running the relevant claude command ---
 app.post('/api/actions/resume', (req, res) => {
+  if (!isCwdAllowed(req.body.cwd)) {
+    res.status(403).json({ ok: false, error: 'cwd is outside allowed browse roots' });
+    return;
+  }
   try {
     actions.resume(req.body.sessionId, req.body.cwd);
     res.json({ ok: true });
@@ -196,6 +236,10 @@ app.post('/api/actions/resume', (req, res) => {
 });
 
 app.post('/api/actions/fork', (req, res) => {
+  if (!isCwdAllowed(req.body.cwd)) {
+    res.status(403).json({ ok: false, error: 'cwd is outside allowed browse roots' });
+    return;
+  }
   try {
     actions.fork(req.body.sessionId, req.body.cwd);
     res.json({ ok: true });
@@ -205,6 +249,10 @@ app.post('/api/actions/fork', (req, res) => {
 });
 
 app.post('/api/actions/continue', (req, res) => {
+  if (!isCwdAllowed(req.body.cwd)) {
+    res.status(403).json({ ok: false, error: 'cwd is outside allowed browse roots' });
+    return;
+  }
   try {
     actions.continueLatest(req.body.cwd);
     res.json({ ok: true });
@@ -219,8 +267,12 @@ app.post('/api/actions/focus', async (req, res) => {
 });
 
 app.post('/api/actions/new', (req, res) => {
+  const { cwd, name, model, effort } = req.body || {};
+  if (!isCwdAllowed(cwd)) {
+    res.status(403).json({ ok: false, error: 'cwd is outside allowed browse roots' });
+    return;
+  }
   try {
-    const { cwd, name, model, effort } = req.body || {};
     actions.newSession(cwd, { name, model, effort });
     res.json({ ok: true });
   } catch (err) {
