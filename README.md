@@ -75,6 +75,16 @@ the browser tab costs nothing extra since a browser is already running anyway.
 - Every launch action opens as a new tab in your existing terminal window rather than
   a separate window, where possible (falls back to a new window if Windows Terminal
   isn't installed).
+- **🖥️ Live terminal** — a collapsible panel under the transcript embeds a real
+  interactive `claude --resume` session in the page itself (via a server-owned
+  pseudo-terminal, rendered with [xterm.js](https://xtermjs.org/)) — no separate
+  window needed to send a follow-up prompt. Since it's a genuine interactive CLI
+  session, not a scripted one-shot, permission prompts, Esc-to-interrupt, and
+  Shift+Tab mode-switching all work exactly as they do in a real terminal.
+  Collapsing the panel detaches without ending the session (like `tmux detach`);
+  reopening it replays recent scrollback. Disabled when the session is already
+  running in an external terminal, to avoid two processes writing the same
+  transcript at once.
 
 **➕ New Session** — pick a known project or browse to a folder (scoped to configured
 allowed roots + your home folder), optional name/model/effort override, then launches
@@ -168,13 +178,19 @@ Either way, check `GET /api/health` to confirm it's up.
   the status/notes/tags database; `chokidar` for live transcript-file
   detection (native event mode, with a periodic full re-scan as a safety net — see
   [📡 Data sources](#-data-sources)); Server-Sent Events (`/events`) push updates to
-  the browser, so the client never polls.
+  the browser, so the client never polls. `node-pty` + a `ws` WebSocket server
+  (`/ws/terminal`) back the live-terminal panel — the server owns a real
+  pseudo-terminal per open session (`src/ptyManager.js`), not a one-shot spawn.
 - **Frontend**: plain HTML/CSS/JS in `public/` — no framework, no bundler, no build
   step. A small hand-written markdown renderer handles transcript formatting (not a
-  library — kept dependency-free and fully offline).
+  library — kept dependency-free and fully offline). [xterm.js](https://xtermjs.org/)
+  is the one exception — vendored (not CDN-loaded) as a browser UMD bundle in
+  `public/vendor/xterm/` for the live-terminal panel, since a real terminal emulator
+  isn't something worth hand-rolling.
 - **External processes shelled out to**: `claude` (the CLI itself), `git` (branch
-  lookup), `wt.exe`/`powershell.exe` (spawning sessions), `rg` (search).
-- **Dependencies**: `express`, `better-sqlite3`, `chokidar` — nothing else. The
+  lookup), `wt.exe`/`powershell.exe` (spawning sessions, and the live-terminal PTY),
+  `rg` (search).
+- **Dependencies**: `express`, `better-sqlite3`, `chokidar`, `node-pty`, `ws`. The
   transitive `qs` (pulled in by Express) is pinned via an `overrides` entry in
   `package.json` to a patched version; see the commit history for why.
 
@@ -195,6 +211,7 @@ claude-session-tracker/
 │   ├── projects.js              # project-key canonicalisation helpers
 │   ├── gitBranch.js             # cached git branch lookups
 │   ├── actions.js               # spawns Resume/Fork/Continue/New Session/focus-window
+│   ├── ptyManager.js            # owns the in-app terminal's pseudo-terminals (one per open session)
 │   ├── browse.js                # scoped directory browser for New Session
 │   ├── search.js                # ripgrep-backed transcript search
 │   ├── sse.js                   # Server-Sent Events client registry + broadcast
@@ -205,7 +222,8 @@ claude-session-tracker/
 └── public/
     ├── index.html                # single page: board, detail pane, modals, help panel
     ├── app.js                    # all client-side logic (SSE handling, rendering, actions)
-    └── styles.css                 # theme + layout
+    ├── styles.css                 # theme + layout
+    └── vendor/xterm/               # vendored xterm.js browser bundle (live-terminal panel)
 ```
 
 ## 🔌 API reference
@@ -215,6 +233,7 @@ All routes are unauthenticated and bound to `127.0.0.1` only.
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/events` | Server-Sent Events stream — a full snapshot on connect, then deltas. |
+| WS | `/ws/terminal?sessionId=&cwd=` | Live-terminal panel: input/output/resize for one session's embedded PTY. Rejects a session already running in an external terminal. |
 | GET | `/api/health` | Liveness + last-poll status. |
 | GET | `/api/config` | Read-only client config (stale threshold, ADO org/project). |
 | GET | `/api/browse?path=` | Scoped directory listing for the New Session folder picker. |
@@ -322,6 +341,15 @@ run fine but never show up here. Verified directly against the actual CLI warnin
   to focusing the shared window itself — you may need to switch tabs manually from
   there. Either way, the session is also selected in the tracker itself as a reliable
   fallback.
+- **Live-terminal sessions don't survive a tracker restart.** The pseudo-terminal
+  lives in the server process's own memory (`src/ptyManager.js`); restarting the
+  server (or its process crashing) ends every open in-app terminal, the same way
+  closing a real terminal window would. Detaching (collapsing the panel) is safe —
+  only stopping the server itself ends the session. Also, since it's a real
+  terminal embedded in the page rather than an OS window, click into it before
+  typing to give it keyboard focus.
+- **`npm install` also needs to build `node-pty`'s native module** (used by the
+  live-terminal panel) — same C++ toolchain requirement as `better-sqlite3` above.
 
 ## 🛠️ Troubleshooting
 

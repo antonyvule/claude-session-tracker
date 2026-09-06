@@ -1,0 +1,7 @@
+Vendored from npm (browser UMD builds, not used server-side):
+  @xterm/xterm      6.0.0   -> xterm.js, xterm.css
+  @xterm/addon-fit  0.11.0  -> addon-fit.js
+
+To upgrade: npm install @xterm/xterm@<version> @xterm/addon-fit@<version>,
+copy lib/xterm.js + css/xterm.css + lib/addon-fit.js from node_modules here,
+then npm uninstall @xterm/xterm @xterm/addon-fit (they aren't runtime deps).

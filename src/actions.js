@@ -190,8 +190,11 @@ function commandTextNewSession({ name, model, effort }) {
 
 module.exports = {
   configure,
+  assertCwdAllowed,
   isValidSessionId,
   isValidCwd,
+  psQuote,
+  CLAUDE_ENV,
   resume,
   fork,
   continueLatest,

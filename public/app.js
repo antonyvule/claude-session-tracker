@@ -37,6 +37,11 @@ const state = {
   selectedSessionId: null,
   chosenFolder: null,
   filter: loadFilter(),
+  // The in-app terminal's WebSocket + xterm instance, if the panel is open for
+  // the currently-selected session — closed and cleared whenever the detail
+  // pane re-renders for a different session (the server-side PTY itself keeps
+  // running regardless; only the browser's view of it disconnects).
+  terminalSocket: null,
 };
 
 function el(tag, attrs = {}, children = []) {
@@ -396,8 +401,89 @@ function updateSelectedDetailHeader() {
   }
 }
 
+// Embeds a real interactive `claude --resume` session in the page via the
+// server's PTY (src/ptyManager.js) instead of opening a separate terminal
+// window. Collapsed by default; connecting is deferred until first opened.
+function buildTerminalPanel(sessionId, card) {
+  const panel = el('div', { class: 'terminal-panel' });
+  const toggleBtn = el('button', { class: 'terminal-toggle', text: '▸ Open live terminal' });
+  const termContainer = el('div', { class: 'terminal-container hidden' });
+  panel.appendChild(toggleBtn);
+  panel.appendChild(termContainer);
+
+  let term = null;
+  let fitAddon = null;
+  let resizeObserver = null;
+
+  function connect() {
+    const term_ = new Terminal({ convertEol: true, fontSize: 13, scrollback: 5000 });
+    fitAddon = new FitAddon.FitAddon();
+    term_.loadAddon(fitAddon);
+    term_.open(termContainer);
+    fitAddon.fit();
+    term = term_;
+
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const params = new URLSearchParams({ sessionId, cwd: card.cwd });
+    const ws = new WebSocket(`${proto}//${location.host}/ws/terminal?${params}`);
+    state.terminalSocket = ws;
+
+    ws.addEventListener('message', (evt) => {
+      let msg;
+      try {
+        msg = JSON.parse(evt.data);
+      } catch {
+        return;
+      }
+      if (msg.type === 'data') term_.write(msg.data);
+      else if (msg.type === 'exit') term_.write(`\r\n\x1b[2m[process exited, code ${msg.exitCode}]\x1b[0m\r\n`);
+    });
+    ws.addEventListener('close', (evt) => {
+      if (evt.code === 1008) term_.write(`\r\n\x1b[2m[${evt.reason || 'connection closed'}]\x1b[0m\r\n`);
+      if (state.terminalSocket === ws) state.terminalSocket = null;
+    });
+    ws.addEventListener('error', () => toast('Terminal connection error', true));
+
+    term_.onData((data) => {
+      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'input', data }));
+    });
+
+    function sendResize() {
+      fitAddon.fit();
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'resize', cols: term_.cols, rows: term_.rows }));
+      }
+    }
+    resizeObserver = new ResizeObserver(sendResize);
+    resizeObserver.observe(termContainer);
+    ws.addEventListener('open', sendResize);
+  }
+
+  toggleBtn.addEventListener('click', () => {
+    const isHidden = termContainer.classList.contains('hidden');
+    if (isHidden) {
+      termContainer.classList.remove('hidden');
+      toggleBtn.textContent = '▾ Live terminal (collapse)';
+      if (!term) connect();
+      else fitAddon.fit();
+    } else {
+      termContainer.classList.add('hidden');
+      toggleBtn.textContent = '▸ Open live terminal';
+    }
+  });
+
+  return panel;
+}
+
 // ---------- Detail pane (right) ----------
 async function selectSession(sessionId) {
+  // Switching sessions (or re-rendering this one) tears down any open
+  // in-app terminal view — the underlying PTY on the server keeps running
+  // regardless; this only disconnects the browser's socket to it.
+  if (state.terminalSocket) {
+    state.terminalSocket.close();
+    state.terminalSocket = null;
+  }
   const card = state.cardsById.get(sessionId);
   // Selecting a session (e.g. from a search result) whose status the current
   // filter hides would otherwise update the detail pane while leaving the list
@@ -466,6 +552,8 @@ async function selectSession(sessionId) {
   }
   body.appendChild(transcriptWrap);
   transcriptWrap.scrollTop = transcriptWrap.scrollHeight; // land on the latest messages, not the oldest
+
+  body.appendChild(buildTerminalPanel(sessionId, card));
 
   // Fixed footer: rename/notes/tags/pin/save — always visible, never scrolls.
   const footer = el('div', { class: 'detail-footer' });

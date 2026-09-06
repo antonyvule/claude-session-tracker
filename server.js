@@ -1,6 +1,8 @@
 const fs = require('fs');
+const http = require('http');
 const path = require('path');
 const express = require('express');
+const { WebSocketServer } = require('ws');
 
 const db = require('./src/db');
 const sse = require('./src/sse');
@@ -11,6 +13,7 @@ const actions = require('./src/actions');
 const historyScanner = require('./src/historyScanner');
 const gitBranch = require('./src/gitBranch');
 const statusEngine = require('./src/statusEngine');
+const ptyManager = require('./src/ptyManager');
 const { createAgentsPoller } = require('./src/agentsPoller');
 
 const SETTINGS_PATH = path.join(__dirname, 'config', 'settings.json');
@@ -283,6 +286,65 @@ app.get('/api/actions/command', (req, res) => {
   }
 });
 
-app.listen(settings.port, '127.0.0.1', () => {
+// --- In-app terminal (embedded PTY, see src/ptyManager.js) ---
+// WebSocket handshakes aren't subject to the same-origin fetch/XHR read-block
+// the POST/PATCH origin check above relies on, so it's checked explicitly here
+// too — otherwise any page in the browser could open a socket straight into a
+// live claude session.
+const server = http.createServer(app);
+const wss = new WebSocketServer({ server, path: '/ws/terminal' });
+
+wss.on('connection', (ws, req) => {
+  const origin = req.headers.origin;
+  if (origin && !ALLOWED_ORIGINS.has(origin)) {
+    ws.close(1008, 'cross-origin request rejected');
+    return;
+  }
+
+  const url = new URL(req.url, 'http://localhost');
+  const sessionId = url.searchParams.get('sessionId');
+  const cwd = url.searchParams.get('cwd');
+
+  if (!ptyManager.isOpen(sessionId)) {
+    const live = poller.getLiveMap().get(sessionId);
+    if (live) {
+      ws.close(1008, 'session is already running elsewhere');
+      return;
+    }
+  }
+
+  try {
+    ptyManager.open(sessionId, cwd);
+  } catch (err) {
+    ws.close(1008, err.message);
+    return;
+  }
+  ptyManager.subscribe(sessionId, ws);
+
+  ws.on('message', (raw) => {
+    let msg;
+    try {
+      msg = JSON.parse(raw);
+    } catch {
+      return;
+    }
+    if (msg.type === 'input' && typeof msg.data === 'string') {
+      ptyManager.write(sessionId, msg.data);
+    } else if (msg.type === 'resize') {
+      ptyManager.resize(sessionId, msg.cols, msg.rows);
+    }
+  });
+});
+
+// Detached `claude`/powershell processes would otherwise outlive the tracker
+// itself across a restart, piling up in the background.
+function shutdown() {
+  ptyManager.closeAll();
+  process.exit(0);
+}
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
+
+server.listen(settings.port, '127.0.0.1', () => {
   console.log(`claude-session-tracker listening on http://127.0.0.1:${settings.port}`);
 });
