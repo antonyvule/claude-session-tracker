@@ -361,6 +361,15 @@ function shutdown() {
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 
+// This is a background service meant to keep running, not exit on the first
+// unexpected error — an uncaught exception anywhere would otherwise take the
+// whole thing down (an actual incident: a rare node-pty race threw from a
+// WebSocket message handler and killed the process — fixed at the source in
+// src/ptyManager.js, but this is the backstop against the next one like it).
+process.on('uncaughtException', (err) => {
+  console.error('[uncaughtException]', err);
+});
+
 server.listen(settings.port, '127.0.0.1', () => {
   console.log(`claude-session-tracker listening on http://127.0.0.1:${settings.port}`);
 });

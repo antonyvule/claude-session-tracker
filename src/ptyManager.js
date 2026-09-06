@@ -47,8 +47,15 @@ function open(sessionId, cwd, cols, rows) {
   const existing = sessions.get(sessionId);
   if (existing) return existing;
 
+  // No -NoExit here (unlike the external-terminal launch in actions.js) —
+  // this pty's whole purpose is to let the client detect when the session
+  // ends (/exit, a crash, anything) via proc.onExit below, so the UI can
+  // fall back to "Not connected" instead of showing a frozen, dead terminal
+  // forever. -NoExit would keep this wrapping shell alive after `claude`
+  // exits, masking the exit entirely — proc.onExit tracks this outer
+  // process, not the CLI specifically.
   const command = `claude --resume ${actions.psQuote(sessionId)}`;
-  const proc = pty.spawn('powershell.exe', ['-NoExit', '-Command', command], {
+  const proc = pty.spawn('powershell.exe', ['-Command', command], {
     name: 'xterm-color',
     cols: Number.isInteger(cols) && cols > 0 ? cols : 80,
     rows: Number.isInteger(rows) && rows > 0 ? rows : 24,
@@ -89,15 +96,29 @@ function subscribe(sessionId, ws) {
   ws.on('close', () => entry.subscribers.delete(ws));
 }
 
+// node-pty can throw synchronously from write()/resize() if the underlying
+// process has *just* exited — there's a real gap between that and our own
+// onExit callback firing to set entry.exited, so the flag check alone isn't
+// enough to rule it out. An uncaught throw here would otherwise crash the
+// entire server (an actual incident — see git history), not just this one
+// session, so both are wrapped defensively.
 function write(sessionId, data) {
   const entry = sessions.get(sessionId);
-  if (entry && !entry.exited) entry.proc.write(data);
+  if (!entry || entry.exited) return;
+  try {
+    entry.proc.write(data);
+  } catch {
+    entry.exited = true;
+  }
 }
 
 function resize(sessionId, cols, rows) {
   const entry = sessions.get(sessionId);
-  if (entry && !entry.exited && Number.isInteger(cols) && Number.isInteger(rows) && cols > 0 && rows > 0) {
+  if (!entry || entry.exited || !Number.isInteger(cols) || !Number.isInteger(rows) || cols <= 0 || rows <= 0) return;
+  try {
     entry.proc.resize(cols, rows);
+  } catch {
+    entry.exited = true;
   }
 }
 
