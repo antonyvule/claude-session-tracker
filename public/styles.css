@@ -256,6 +256,9 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   min-height: 0;
   overflow-y: auto;
   padding: 0.6rem 1.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 .empty-state { color: var(--text-faint); padding: 2rem; text-align: center; font-family: var(--mono); }
 .status-select { border-left: 3px solid var(--status-color, var(--border)); }
@@ -315,20 +318,28 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .pinned-label { display: flex !important; align-items: center; gap: 0.4rem; font-family: var(--sans) !important; font-size: 0.85rem !important; text-transform: none !important; letter-spacing: normal !important; color: var(--text) !important; cursor: pointer; margin-bottom: 0 !important; }
 .pinned-label input { width: auto; }
 .preview-turn {
-  border-left: 3px solid var(--border);
-  border-radius: 0 var(--radius) var(--radius) 0;
+  max-width: 75%;
   padding: 0.6rem 0.8rem;
-  margin-bottom: 0.6rem;
   font-size: 0.85rem;
   line-height: 1.55;
   overflow-wrap: break-word;
   word-break: break-word;
   background: var(--surface-2);
+  border: 1px solid var(--border-quiet);
 }
-.preview-turn[data-role="user"] { border-left-color: var(--accent); background: var(--accent-tint); }
-.preview-turn[data-role="assistant"] { border-left-color: var(--border-quiet); }
+.preview-turn[data-role="user"] {
+  align-self: flex-end;
+  background: var(--accent-tint);
+  border-color: var(--accent);
+  border-radius: 14px 14px 2px 14px;
+}
+.preview-turn[data-role="assistant"] {
+  align-self: flex-start;
+  border-radius: 14px 14px 14px 2px;
+}
 .preview-turn .role { font-family: var(--mono); font-weight: 600; font-size: 0.68rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent); margin-bottom: 0.3rem; }
 .preview-turn[data-role="assistant"] .role { color: var(--highlight); }
+.preview-turn[data-role="user"] .role { text-align: right; }
 .turn-text { white-space: pre-wrap; }
 .turn-text .md-heading { font-weight: 700; margin: 0.6rem 0 0.3rem; color: var(--text); }
 .turn-text .md-heading:first-child { margin-top: 0; }
