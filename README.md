@@ -40,13 +40,16 @@ the browser tab costs nothing extra since a browser is already running anyway.
   pill, so you can still tell sessions from different projects apart at a glance.
 - Filter chips at the top: **All** (To Do / In Progress / Blocked — Done and Archived
   are deliberately excluded from "All"), plus one chip per status.
-- Each card shows: a colour-coded status pill (📝 To Do, 🔄 In Progress, 🚫 Blocked,
-  ✅ Done, 🗄️ Archived), project name, git branch, relative last-active time (absolute
-  on hover), a live dot when running, and badges for **Needs You**, **Stale**, and
-  **Pinned**. Status is only ever auto-set for "running → In Progress"; Done and
-  Archived are explicit-only and never auto-suggested. An In Progress session that
-  goes idle past the stale threshold gets a **Stale** badge without its status
-  changing — an untouched To Do/Blocked is simply left as-is.
+- Each card is a fixed height (long titles clamp with an ellipsis, so the list
+  stays visually consistent) and shows: a colour-coded status pill (📝 To Do,
+  🔄 In Progress, 🚫 Blocked, ✅ Done, 🗄️ Archived), project name, relative
+  last-active time (absolute on hover), a live dot when running, and badges for
+  **Needs You**, **Stale**, and **Pinned**. Status is only ever auto-set for
+  "running → In Progress"; Done and Archived are explicit-only and never
+  auto-suggested. An In Progress session that goes idle past the stale threshold
+  gets a **Stale** badge without its status changing — an untouched To
+  Do/Blocked is simply left as-is. Git branch moved to the detail pane (next to
+  Folder) to keep the card itself uncluttered.
 - Drag a card onto another anywhere in the list to set a manual order — it's a
   tiebreaker only; Needs You/Stale/Pinned still always float to the top regardless.
 - Hover any button, badge, or chip for a tooltip explaining it; the **?** button in
@@ -114,8 +117,8 @@ lighter variant for anyone whose OS prefers light mode.
   from source (see [🛠️ Troubleshooting](#️-troubleshooting)).
 - **Claude Code CLI** (`claude`) on PATH — this tool is a dashboard on top of it, not
   a replacement.
-- **Git** on PATH — used for the per-card branch display (`git branch
-  --show-current`); a project without git simply shows no branch.
+- **Git** on PATH — used for the branch shown in a session's detail pane
+  (`git branch --show-current`); a project without git simply shows no branch.
 - **Windows Terminal** (`wt.exe`) — optional but recommended. Every launch action
   (Resume/Fork/Continue/New Session) opens as a new tab in your existing terminal
   window when it's available, falling back to a plain new PowerShell window if not.

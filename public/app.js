@@ -273,7 +273,6 @@ function renderCard(card) {
   const meta = [];
   meta.push(el('span', { class: 'status-pill', 'data-status': card.status, text: `${STATUS_ICONS[card.status]} ${STATUS_LABELS[card.status]}`, title: STATUS_LABELS[card.status] }));
   meta.push(projectLabelEl(card));
-  if (card.branch) meta.push(el('span', { text: card.branch, title: `Git branch: ${card.branch}` }));
   meta.push(el('span', { text: relativeTime(card.lastActiveMs), title: new Date(card.lastActiveMs).toLocaleString() }));
   if (card.running) meta.push(el('span', { class: 'dot', title: 'Currently running' }));
   if (card.needsAttention) meta.push(el('span', { class: 'badge badge-needs-you', text: 'Needs you', title: 'The assistant is waiting on a tool/permission approval with no reply yet' }));
@@ -647,9 +646,13 @@ async function selectSession(sessionId) {
   statusRow.appendChild(buildStatusSelect(sessionId, card));
   header.appendChild(statusRow);
 
+  const folderValue = [el('span', { text: card.cwd })];
+  if (card.branch) {
+    folderValue.push(el('span', { class: 'detail-branch', text: card.branch, title: `Git branch: ${card.branch}` }));
+  }
   header.appendChild(el('div', { class: 'detail-row' }, [
     el('label', { text: 'Folder' }),
-    el('div', { text: card.cwd }),
+    el('div', { class: 'detail-folder-value' }, folderValue),
   ]));
 
   header.appendChild(buildActionBtns(card));
