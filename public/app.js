@@ -42,6 +42,10 @@ const state = {
   // pane re-renders for a different session (the server-side PTY itself keeps
   // running regardless; only the browser's view of it disconnects).
   terminalSocket: null,
+  // The currently-rendered terminal panel's handle ({panel, sessionId,
+  // refresh}) — updateSelectedDetailHeader calls refresh() on it whenever an
+  // SSE update changes the selected session's running state.
+  terminalPanelHandle: null,
   editingSessionId: null,
 };
 
@@ -400,13 +404,19 @@ function updateSelectedDetailHeader() {
   if (oldActionBtns && oldActionBtns.dataset.key !== actionBtnsKey(card)) {
     oldActionBtns.replaceWith(buildActionBtns(card));
   }
+
+  if (state.terminalPanelHandle && state.terminalPanelHandle.sessionId === state.selectedSessionId) {
+    state.terminalPanelHandle.refresh(card);
+  }
 }
 
 // Embeds a real interactive `claude --resume` session in the page via the
 // server's PTY (src/ptyManager.js) instead of opening a separate terminal
-// window. The panel itself is always present (no collapse) so its layout is
-// already stable by the time a fit() ever runs; connecting only happens on
-// an explicit click, never just from viewing a session's history.
+// window. The panel itself is always present (no collapse). Connecting
+// never happens just from viewing a session's history — only on an
+// explicit click, or automatically once we learn (via refresh(), driven by
+// SSE updates) that the session just started running, so switching away
+// and back to an already-running session reconnects without re-clicking.
 function buildTerminalPanel(sessionId, card) {
   const panel = el('div', { class: 'terminal-panel' });
   panel.appendChild(el('div', { class: 'terminal-label', text: 'Live terminal' }));
@@ -420,20 +430,30 @@ function buildTerminalPanel(sessionId, card) {
   const termInner = el('div', { class: 'terminal-inner' });
   const termContainer = el('div', { class: 'terminal-container' }, [termInner]);
 
+  const placeholderMsg = el('div', { text: 'Not connected.' });
   const startBtn = el('button', { class: 'terminal-start-btn', text: '▶ Resume here', title: "Runs this session's claude --resume right in the page — no separate terminal window" });
-  const placeholder = el('div', { class: 'terminal-placeholder' }, [
-    el('div', { text: 'Not connected.' }),
-    startBtn,
-  ]);
+  const placeholder = el('div', { class: 'terminal-placeholder' }, [placeholderMsg, startBtn]);
   termContainer.appendChild(placeholder);
   panel.appendChild(termContainer);
 
-  let connected = false;
-  let refitTimer = null;
+  // 'idle': showing the placeholder, ready for a connect attempt (fresh or
+  // retry). 'connecting'/'connected': actively showing the terminal.
+  let connectionState = 'idle';
+
+  // Reset back to the placeholder — used both for a rejected/ended
+  // connection and (via refresh()) to clear a stale reason once the thing
+  // that was blocking it stops being true, so a retry doesn't still look
+  // like it can't be done.
+  function showPlaceholder(message) {
+    connectionState = 'idle';
+    placeholderMsg.textContent = message || 'Not connected.';
+    termInner.replaceChildren();
+    if (!termContainer.contains(placeholder)) termContainer.appendChild(placeholder);
+  }
 
   function connect() {
-    if (connected) return;
-    connected = true;
+    if (connectionState !== 'idle') return;
+    connectionState = 'connecting';
     placeholder.remove();
 
     const term_ = new Terminal({ convertEol: true, fontSize: 13, scrollback: 5000 });
@@ -455,7 +475,11 @@ function buildTerminalPanel(sessionId, card) {
     const params = new URLSearchParams({ sessionId, cwd: card.cwd, cols: term_.cols, rows: term_.rows });
     const ws = new WebSocket(`${proto}//${location.host}/ws/terminal?${params}`);
     state.terminalSocket = ws;
+    let refitTimer = null;
 
+    ws.addEventListener('open', () => {
+      connectionState = 'connected';
+    });
     ws.addEventListener('message', (evt) => {
       let msg;
       try {
@@ -476,12 +500,15 @@ function buildTerminalPanel(sessionId, card) {
         clearTimeout(refitTimer);
         refitTimer = setTimeout(() => sendResize(), 150);
       } else if (msg.type === 'exit') {
-        term_.write(`\r\n\x1b[2m[process exited, code ${msg.exitCode}]\x1b[0m\r\n`);
+        // The underlying pty is gone (src/ptyManager.js drops its entry on
+        // exit) — back to idle so a fresh click spawns a genuinely new one,
+        // instead of leaving a dead terminal with no way to retry.
+        showPlaceholder(`Session ended (exit code ${msg.exitCode}).`);
       }
     });
     ws.addEventListener('close', (evt) => {
-      if (evt.code === 1008) term_.write(`\r\n\x1b[2m[${evt.reason || 'connection closed'}]\x1b[0m\r\n`);
       if (state.terminalSocket === ws) state.terminalSocket = null;
+      if (connectionState !== 'idle') showPlaceholder(evt.code === 1008 ? evt.reason : null);
     });
     ws.addEventListener('error', () => toast('Terminal connection error', true));
 
@@ -499,8 +526,25 @@ function buildTerminalPanel(sessionId, card) {
   }
 
   startBtn.addEventListener('click', connect);
+  if (card.running) connect();
 
-  return panel;
+  let lastKnownRunning = card.running;
+  // Called on every SSE-driven header refresh (see updateSelectedDetailHeader)
+  // so the panel reacts to state changes it wasn't open to witness directly —
+  // e.g. reselecting this session later, or the external terminal that was
+  // blocking a connect attempt closing in the meantime.
+  function refresh(nextCard) {
+    const wasRunning = lastKnownRunning;
+    lastKnownRunning = nextCard.running;
+    if (connectionState !== 'idle') return;
+    if (!wasRunning && nextCard.running) {
+      connect();
+    } else if (wasRunning && !nextCard.running) {
+      placeholderMsg.textContent = 'Not connected.';
+    }
+  }
+
+  return { panel, sessionId, refresh };
 }
 
 // ---------- Detail pane (right) ----------
@@ -584,7 +628,9 @@ async function selectSession(sessionId) {
   body.appendChild(transcriptWrap);
   transcriptWrap.scrollTop = transcriptWrap.scrollHeight; // land on the latest messages, not the oldest
 
-  body.appendChild(buildTerminalPanel(sessionId, card));
+  const terminalPanelHandle = buildTerminalPanel(sessionId, card);
+  state.terminalPanelHandle = terminalPanelHandle;
+  body.appendChild(terminalPanelHandle.panel);
 }
 
 // ---------- Edit session modal (rename/notes/tags/pin) ----------
