@@ -46,6 +46,12 @@ const state = {
   // refresh}) — updateSelectedDetailHeader calls refresh() on it whenever an
   // SSE update changes the selected session's running state.
   terminalPanelHandle: null,
+  // sessionIds with a live in-app terminal connection, tracked independently
+  // of card.running: that field comes from the external `claude agents`
+  // poll cycle (up to pollIntervalMs, ~4s, behind), so a session connected
+  // moments ago can still read as not-running if you switch away and back
+  // quickly — this set is authoritative immediately, no poll lag possible.
+  myOpenTerminalIds: new Set(),
   editingSessionId: null,
 };
 
@@ -446,6 +452,7 @@ function buildTerminalPanel(sessionId, card) {
   // like it can't be done.
   function showPlaceholder(message) {
     connectionState = 'idle';
+    state.myOpenTerminalIds.delete(sessionId);
     placeholderMsg.textContent = message || 'Not connected.';
     termInner.replaceChildren();
     if (!termContainer.contains(placeholder)) termContainer.appendChild(placeholder);
@@ -479,6 +486,7 @@ function buildTerminalPanel(sessionId, card) {
 
     ws.addEventListener('open', () => {
       connectionState = 'connected';
+      state.myOpenTerminalIds.add(sessionId);
     });
     ws.addEventListener('message', (evt) => {
       let msg;
@@ -526,7 +534,9 @@ function buildTerminalPanel(sessionId, card) {
   }
 
   startBtn.addEventListener('click', connect);
-  if (card.running) connect();
+  // card.running alone would miss a session we ourselves just connected to
+  // moments ago (see myOpenTerminalIds above) — check both.
+  if (card.running || state.myOpenTerminalIds.has(sessionId)) connect();
 
   let lastKnownRunning = card.running;
   // Called on every SSE-driven header refresh (see updateSelectedDetailHeader)
