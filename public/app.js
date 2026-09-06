@@ -29,6 +29,13 @@ function loadFilter() {
   return localStorage.getItem('sessionFilter') || 'active';
 }
 
+// Collapsed by default (a session is usually opened to use the live
+// terminal, not read back through history) but remembers the last choice
+// once you do open it, the same way the filter chip does.
+function loadHistoryExpanded() {
+  return localStorage.getItem('historyExpanded') === '1';
+}
+
 const state = {
   cardsById: new Map(),
   projectsByKey: new Map(),
@@ -468,7 +475,7 @@ function buildTerminalPanel(sessionId, card) {
     connectionState = 'connecting';
     placeholder.remove();
 
-    const term_ = new Terminal({ convertEol: true, fontSize: 13, scrollback: 5000 });
+    const term_ = new Terminal({ convertEol: true, fontSize: 15, scrollback: 5000 });
     const fitAddon = new FitAddon.FitAddon();
     term_.loadAddon(fitAddon);
     term_.open(termInner);
@@ -652,13 +659,29 @@ async function selectSession(sessionId) {
   terminalPanelHandle.connectIfRunning();
 
   // Scrollable middle: only the transcript scrolls, everything else stays on screen.
+  // Collapsible — collapsed by default, but remembers your choice (see
+  // loadHistoryExpanded) rather than resetting it every time you select a
+  // session, since opening a session is usually about the live terminal.
   const historySection = el('div', { class: 'history-section' });
-  historySection.appendChild(el('div', { class: 'section-label', text: 'History' }));
+  const historyToggle = el('button', { class: 'section-label collapsible-label', text: 'History' });
   const transcriptWrap = el('div', { class: 'detail-transcript' });
   renderTranscriptTurns(transcriptWrap, detail);
+  historySection.appendChild(historyToggle);
   historySection.appendChild(transcriptWrap);
   body.appendChild(historySection);
-  transcriptWrap.scrollTop = transcriptWrap.scrollHeight; // land on the latest messages, not the oldest
+
+  function applyHistoryExpanded(expanded) {
+    historyToggle.textContent = (expanded ? '▾ ' : '▸ ') + 'History';
+    transcriptWrap.classList.toggle('hidden', !expanded);
+    historySection.classList.toggle('expanded', expanded);
+    if (expanded) transcriptWrap.scrollTop = transcriptWrap.scrollHeight; // land on the latest messages, not the oldest
+  }
+  applyHistoryExpanded(loadHistoryExpanded());
+  historyToggle.addEventListener('click', () => {
+    const expanded = !historySection.classList.contains('expanded');
+    localStorage.setItem('historyExpanded', expanded ? '1' : '0');
+    applyHistoryExpanded(expanded);
+  });
 }
 
 function renderTranscriptTurns(container, detail) {
