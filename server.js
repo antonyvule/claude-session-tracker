@@ -200,26 +200,14 @@ app.patch('/api/sessions/:sessionId', (req, res) => {
   res.json(updated);
 });
 
-// --- Project patch (rename, ADO ticket link, priority, ignore) ---
+// --- Project patch (rename, ADO ticket link, ignore) ---
 app.patch('/api/projects/:projectKey', (req, res) => {
   const updated = db.patchProject(req.params.projectKey, req.body || {});
   recomputeAndBroadcast();
   res.json(updated);
 });
 
-// --- Project reorder (drag on the board) ---
-app.post('/api/projects/reorder', (req, res) => {
-  const { orderedKeys } = req.body || {};
-  if (!Array.isArray(orderedKeys)) {
-    res.status(400).json({ error: 'orderedKeys must be an array' });
-    return;
-  }
-  db.reorderProjects(orderedKeys);
-  recomputeAndBroadcast();
-  res.json({ ok: true });
-});
-
-// --- Session reorder within a project (drag in the list) ---
+// --- Session reorder (drag in the list) ---
 app.post('/api/sessions/reorder', (req, res) => {
   const { orderedSessionIds } = req.body || {};
   if (!Array.isArray(orderedSessionIds)) {

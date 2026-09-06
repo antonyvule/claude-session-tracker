@@ -60,7 +60,7 @@
     <dl class="help-list">
       <dt>Needs You</dt><dd>The last thing that happened in the transcript was the assistant using a tool with no reply after it — usually a pending permission prompt. Doesn't detect a plain question in the text, only this specific "waiting on you" signal.</dd>
       <dt>Stale</dt><dd>Was In Progress but hasn't been touched past the stale threshold, and running has stopped — flagged only, status stays In Progress. Only In Progress sessions get this; an untouched To Do/Blocked just stays as-is with no auto-flip.</dd>
-      <dt>Pinned</dt><dd>Purely a sort flag, set by you (checkbox in a session's detail pane). A pinned session always sorts to the top of its project group, above Needs You/Stale/manual order. No other effect.</dd>
+      <dt>Pinned</dt><dd>Purely a sort flag, set by you (checkbox in a session's detail pane). A pinned session always sorts to the top of the list, above Needs You/Stale/manual order. No other effect.</dd>
       <dt>● live dot</dt><dd>The CLI currently reports this session as running.</dd>
     </dl>
   </div>
@@ -80,7 +80,7 @@
     <h3>Other</h3>
     <dl class="help-list">
       <dt>Filters</dt><dd>"All" means all active work (To Do / In Progress / Blocked) — Done and Archived are deliberately excluded from it and only show via their own chips.</dd>
-      <dt>Reordering</dt><dd>Drag a session card onto another card in the same project to set a manual order — it's a tiebreaker only; Needs You/Stale/Pinned still always float to the top. Project groups themselves reorder via the ↑↓ buttons on their header.</dd>
+      <dt>Reordering</dt><dd>Drag a session card onto another to set a manual order — it's a tiebreaker only; Needs You/Stale/Pinned still always float to the top.</dd>
       <dt>Window focus</dt><dd>All launches open as a new tab in your existing terminal window rather than a separate window, when possible. Bringing a window to the foreground from here is best-effort — Windows restricts background apps from stealing focus, so it can occasionally just select the session here instead of visibly focusing it.</dd>
     </dl>
   </div>

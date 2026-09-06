@@ -196,25 +196,6 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   padding: 0.6rem;
 }
 
-.project-group { margin-bottom: 0.9rem; }
-.project-header {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-family: var(--mono);
-  font-size: 0.68rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-faint);
-  padding: 0.3rem 0.4rem;
-  border-bottom: 1px solid var(--border-quiet);
-  margin-bottom: 0.4rem;
-}
-.project-header a { color: var(--accent); text-decoration: none; }
-.project-header .priority-btns { margin-left: auto; display: flex; gap: 0.2rem; }
-.project-header .priority-btns button { padding: 0 0.4rem; font-size: 0.65rem; }
-
 .card {
   background: var(--surface-2);
   border: 1px solid var(--border);
@@ -232,6 +213,8 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .card-title { font-weight: 600; margin-bottom: 0.3rem; word-break: break-word; }
 .card.selected .card-title { color: var(--highlight); }
 .card-meta { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; color: var(--text-dim); font-family: var(--mono); font-size: 0.72rem; }
+.card-meta a { color: var(--accent); text-decoration: none; }
+.project-label { color: var(--text-faint); }
 .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; background: var(--ok); box-shadow: 0 0 0 2px var(--ok-tint); }
 .badge, .status-pill {
   border-radius: 999px;

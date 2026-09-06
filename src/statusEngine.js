@@ -5,7 +5,7 @@ const { canonicalProjectKey } = require('./projects');
 
 // Builds the full board view model by merging: the live `claude agents` roster,
 // on-disk transcript index (mtime only — no full parse here, see historyScanner
-// for why), and our own SQLite status/notes/pin/priority data.
+// for why), and our own SQLite status/notes/pin data.
 function buildBoard(liveMap, staleThresholdHours) {
   const historical = historyScanner.listHistoricalSessions();
   const historicalById = new Map(historical.map((h) => [h.sessionId, h]));
@@ -96,7 +96,6 @@ function buildBoard(liveMap, staleThresholdHours) {
       projectKey: key,
       displayName: (row && row.display_name) || null,
       adoTicketId: (row && row.ado_ticket_id) || null,
-      priority: row && row.priority !== null && row.priority !== undefined ? row.priority : null,
     };
   });
 

@@ -16,7 +16,7 @@ try {
   process.exit(1);
 }
 
-const CURRENT_SCHEMA_VERSION = 2;
+const CURRENT_SCHEMA_VERSION = 3;
 const userVersion = db.pragma('user_version', { simple: true });
 
 if (userVersion < 1) {
@@ -40,7 +40,7 @@ if (userVersion < 1) {
       project_key   TEXT PRIMARY KEY,
       display_name  TEXT,
       ado_ticket_id INTEGER,
-      priority      INTEGER,
+      priority      INTEGER, -- unused: was project-group ordering, removed when the session list became flat
       ignored       INTEGER NOT NULL DEFAULT 0,
       created_at    INTEGER NOT NULL,
       updated_at    INTEGER NOT NULL
@@ -52,11 +52,22 @@ if (userVersion < 1) {
 if (userVersion < 2) {
   // Additive only — existing rows get order_index = NULL, never destructive.
   db.exec('ALTER TABLE sessions ADD COLUMN order_index INTEGER;');
+  db.pragma('user_version = 2');
+}
+
+if (userVersion < 3) {
+  // order_index used to be meaningful only *within* a project's own drag-reorder
+  // group (each project's manual order started its own local 0, 1, 2...). Now
+  // that the session list is flat, those old per-project indices would collide
+  // and incorrectly float long-untouched sessions above much more recently
+  // active ones. Reset them once so the new global ordering starts clean —
+  // still additive in spirit (no rows deleted, no other column touched).
+  db.exec('UPDATE sessions SET order_index = NULL WHERE order_index IS NOT NULL;');
   db.pragma(`user_version = ${CURRENT_SCHEMA_VERSION}`);
 }
 
 const ALLOWED_SESSION_FIELDS = ['status', 'notes', 'tags', 'title_override', 'pinned', 'manually_set', 'ignored', 'order_index'];
-const ALLOWED_PROJECT_FIELDS = ['display_name', 'ado_ticket_id', 'priority', 'ignored'];
+const ALLOWED_PROJECT_FIELDS = ['display_name', 'ado_ticket_id', 'ignored'];
 const BOOLEAN_FIELDS = new Set(['pinned', 'manually_set', 'ignored']);
 
 // better-sqlite3 only binds numbers/strings/bigints/buffers/null — coerce JS
@@ -129,13 +140,12 @@ function patchProject(projectKey, patch) {
     }
   } else {
     db.prepare(`
-      INSERT INTO projects (project_key, display_name, ado_ticket_id, priority, ignored, created_at, updated_at)
-      VALUES (@project_key, @display_name, @ado_ticket_id, @priority, @ignored, @created_at, @updated_at)
+      INSERT INTO projects (project_key, display_name, ado_ticket_id, ignored, created_at, updated_at)
+      VALUES (@project_key, @display_name, @ado_ticket_id, @ignored, @created_at, @updated_at)
     `).run({
       project_key: projectKey,
       display_name: fields.display_name ?? null,
       ado_ticket_id: fields.ado_ticket_id ?? null,
-      priority: fields.priority ?? null,
       ignored: fields.ignored ?? 0,
       created_at: ts,
       updated_at: ts,
@@ -144,24 +154,8 @@ function patchProject(projectKey, patch) {
   return getProject(projectKey);
 }
 
-const reorderProjects = db.transaction((orderedKeys) => {
-  const ts = Date.now();
-  orderedKeys.forEach((key, idx) => {
-    const existing = getProject(key);
-    if (existing) {
-      db.prepare('UPDATE projects SET priority = ?, updated_at = ? WHERE project_key = ?').run(idx, ts, key);
-    } else {
-      db.prepare(`
-        INSERT INTO projects (project_key, priority, ignored, created_at, updated_at)
-        VALUES (?, ?, 0, ?, ?)
-      `).run(key, idx, ts, ts);
-    }
-  });
-});
-
-// Reordering within a project: the client sends the full ordered list of session
-// ids for that one project's card list; unrelated sessions elsewhere keep their
-// own order_index untouched.
+// The client sends the full ordered list of visible session ids (one flat
+// list, no per-project scoping) and every one of them gets a fresh order_index.
 const reorderSessions = db.transaction((orderedSessionIds) => {
   orderedSessionIds.forEach((sessionId, idx) => {
     patchSession(sessionId, { order_index: idx });
@@ -176,6 +170,5 @@ module.exports = {
   listProjects,
   getProject,
   patchProject,
-  reorderProjects,
   reorderSessions,
 };

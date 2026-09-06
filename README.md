@@ -5,10 +5,11 @@
 ![No framework](https://img.shields.io/badge/frontend-no%20framework-informational.svg)
 
 A local dashboard for tracking Claude Code CLI sessions across every project on this
-machine — status, notes, tags, priority, and a "needs you" flag that Claude Code's own
-session list doesn't provide. Layout: a filterable, colour-coded session list on the
-left (grouped by project, priority-ordered); the selected session's full transcript,
-cost estimate, status control, and actions on the right.
+machine — status, notes, tags, and a "needs you" flag that Claude Code's own session
+list doesn't provide. Layout: a filterable, colour-coded session list on the left (a
+single flat list, most recently active first, with pinning and manual drag reorder),
+showing each session's project/repo; the selected session's full transcript, cost
+estimate, status control, and actions on the right.
 
 It's a plain Node/Express server + a no-framework browser UI, not a desktop app. The
 server is the only thing resident all the time (tens of MB RAM, near-zero idle CPU);
@@ -34,18 +35,19 @@ the browser tab costs nothing extra since a browser is already running anyway.
 ## ✨ Features
 
 **Session list (left pane)**
-- Grouped by project, each group showing a display name, an optional linked ADO
-  ticket link, and ↑/↓ buttons to manually reorder projects relative to each other.
+- A single flat list, most recently active first — no project grouping. Each card
+  shows its project/repo name (with the linked ADO ticket, if any) next to the status
+  pill, so you can still tell sessions from different projects apart at a glance.
 - Filter chips at the top: **All** (To Do / In Progress / Blocked — Done and Archived
   are deliberately excluded from "All"), plus one chip per status.
 - Each card shows: a colour-coded status pill (📝 To Do, 🔄 In Progress, 🚫 Blocked,
-  ✅ Done, 🗄️ Archived), git branch, relative last-active time (absolute on hover), a
-  live dot when running, and badges for **Needs You**, **Stale**, and **Pinned**.
-  Status is only ever auto-set for "running → In Progress"; Done and Archived are
-  explicit-only and never auto-suggested. An In Progress session that goes idle past
-  the stale threshold gets a **Stale** badge without its status changing — an
-  untouched To Do/Blocked is simply left as-is.
-- Drag a card onto another card in the same project to set a manual order — it's a
+  ✅ Done, 🗄️ Archived), project name, git branch, relative last-active time (absolute
+  on hover), a live dot when running, and badges for **Needs You**, **Stale**, and
+  **Pinned**. Status is only ever auto-set for "running → In Progress"; Done and
+  Archived are explicit-only and never auto-suggested. An In Progress session that
+  goes idle past the stale threshold gets a **Stale** badge without its status
+  changing — an untouched To Do/Blocked is simply left as-is.
+- Drag a card onto another anywhere in the list to set a manual order — it's a
   tiebreaker only; Needs You/Stale/Pinned still always float to the top regardless.
 - Hover any button, badge, or chip for a tooltip explaining it; the **?** button in
   the header opens a full glossary panel.
@@ -163,7 +165,7 @@ Either way, check `GET /api/health` to confirm it's up.
 ## 🏗️ Architecture
 
 - **Backend**: Node.js + Express, single process, no build step. `better-sqlite3` for
-  the status/notes/tags/priority database; `chokidar` for live transcript-file
+  the status/notes/tags database; `chokidar` for live transcript-file
   detection (native event mode, with a periodic full re-scan as a safety net — see
   [📡 Data sources](#-data-sources)); Server-Sent Events (`/events`) push updates to
   the browser, so the client never polls.
@@ -220,9 +222,8 @@ All routes are unauthenticated and bound to `127.0.0.1` only.
 | GET | `/api/search?q=` | ripgrep-backed full-text search across transcripts. |
 | GET | `/api/sessions/:sessionId/detail` | Full parsed transcript + rough cost estimate for one session. |
 | PATCH | `/api/sessions/:sessionId` | Update status/notes/tags/pinned/title/ignored/order. |
-| PATCH | `/api/projects/:projectKey` | Update a project's display name/ADO ticket/priority/ignored. |
-| POST | `/api/projects/reorder` | Set manual priority order across projects. |
-| POST | `/api/sessions/reorder` | Set manual order for sessions within one project. |
+| PATCH | `/api/projects/:projectKey` | Update a project's display name/ADO ticket/ignored. |
+| POST | `/api/sessions/reorder` | Set manual order for the flat session list. |
 | POST | `/api/actions/resume` | Spawn `claude --resume <sessionId>`. |
 | POST | `/api/actions/fork` | Spawn `claude --resume <sessionId> --fork-session`. |
 | POST | `/api/actions/continue` | Spawn `claude -c` in a project folder. |
@@ -264,10 +265,10 @@ All routes are unauthenticated and bound to `127.0.0.1` only.
 ## 🗄️ Data model
 
 SQLite (`data/tracker.db`, gitignored) holds two tables:
-- `sessions` — status, notes, tags, pin, manual-order index (drag-to-reorder within a
-  project), manual-override flag, ignore flag — keyed by Claude Code's own `sessionId`.
+- `sessions` — status, notes, tags, pin, manual-order index (drag-to-reorder in the
+  flat list), manual-override flag, ignore flag — keyed by Claude Code's own `sessionId`.
 - `projects` — display name, linked ADO ticket id (link-out only, no auto-fetch),
-  manual priority order, ignore flag — keyed by a normalized project folder path.
+  ignore flag — keyed by a normalized project folder path.
 
 Archiving only ever changes the `status` column. Nothing under `~/.claude/projects/`
 or `~/.claude/sessions/` is ever modified, moved, or deleted. The schema is migrated

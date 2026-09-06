@@ -199,29 +199,21 @@ function projectDisplayName(projectKey, sampleCwd) {
   return parts[parts.length - 1] || sampleCwd;
 }
 
+// Project/repo label shown on each card (there's no project group header to
+// carry this anymore). Doubles as the ADO ticket link when one is set.
+function projectLabelEl(card) {
+  const label = projectDisplayName(card.projectKey, card.cwd);
+  const project = state.projectsByKey.get(card.projectKey);
+  if (project && project.adoTicketId && state.adoConfig.org && state.adoConfig.project) {
+    const url = `https://dev.azure.com/${state.adoConfig.org}/${state.adoConfig.project}/_workitems/edit/${project.adoTicketId}`;
+    return el('a', { href: url, target: '_blank', text: `${label} #${project.adoTicketId}`, title: 'Project — opens linked ADO ticket', onclick: (e) => e.stopPropagation() });
+  }
+  return el('span', { class: 'project-label', text: label, title: 'Project' });
+}
+
 function matchesFilter(card) {
   if (state.filter === 'active') return ACTIVE_STATUSES.includes(card.status);
   return card.status === state.filter;
-}
-
-function movePriority(orderedKeys, projectKey, delta) {
-  const idx = orderedKeys.indexOf(projectKey);
-  const swapWith = idx + delta;
-  if (swapWith < 0 || swapWith >= orderedKeys.length) return orderedKeys;
-  const next = orderedKeys.slice();
-  [next[idx], next[swapWith]] = [next[swapWith], next[idx]];
-  return next;
-}
-
-function currentPriorityOrder() {
-  return Array.from(new Set(Array.from(state.cardsById.values()).map((c) => c.projectKey))).sort((a, b) => {
-    const pa = state.projectsByKey.get(a);
-    const pb = state.projectsByKey.get(b);
-    const ra = pa && pa.priority !== null ? pa.priority : Infinity;
-    const rb = pb && pb.priority !== null ? pb.priority : Infinity;
-    if (ra !== rb) return ra - rb;
-    return a.localeCompare(b);
-  });
 }
 
 // ---------- Filter bar ----------
@@ -251,12 +243,13 @@ function renderCard(card) {
   const title = card.titleOverride || card.name || `session ${card.sessionId.slice(0, 8)}`;
   const meta = [];
   meta.push(el('span', { class: 'status-pill', 'data-status': card.status, text: `${STATUS_ICONS[card.status]} ${STATUS_LABELS[card.status]}`, title: STATUS_LABELS[card.status] }));
+  meta.push(projectLabelEl(card));
   if (card.branch) meta.push(el('span', { text: card.branch, title: `Git branch: ${card.branch}` }));
   meta.push(el('span', { text: relativeTime(card.lastActiveMs), title: new Date(card.lastActiveMs).toLocaleString() }));
   if (card.running) meta.push(el('span', { class: 'dot', title: 'Currently running' }));
   if (card.needsAttention) meta.push(el('span', { class: 'badge badge-needs-you', text: 'Needs you', title: 'The assistant is waiting on a tool/permission approval with no reply yet' }));
   if (card.stale) meta.push(el('span', { class: 'badge badge-stale', text: 'Stale', title: 'Was In Progress but untouched past the stale threshold' }));
-  if (card.pinned) meta.push(el('span', { class: 'badge badge-pinned', text: 'Pinned', title: 'Pinned — always sorts to the top of its project group' }));
+  if (card.pinned) meta.push(el('span', { class: 'badge badge-pinned', text: 'Pinned', title: 'Pinned — always sorts to the top of the list' }));
 
   const isSelected = card.sessionId === state.selectedSessionId;
   return el('div', {
@@ -266,7 +259,7 @@ function renderCard(card) {
     draggable: 'true',
     onclick: () => selectSession(card.sessionId),
     ondragstart: (e) => {
-      e.dataTransfer.setData('text/plain', JSON.stringify({ sessionId: card.sessionId, projectKey: card.projectKey }));
+      e.dataTransfer.setData('text/plain', JSON.stringify({ sessionId: card.sessionId }));
     },
     ondragover: (e) => e.preventDefault(),
     ondrop: (e) => {
@@ -280,8 +273,6 @@ function renderCard(card) {
   ]);
 }
 
-// Reordering only makes sense within one project's own list — a drop onto a
-// card from a different project is silently ignored rather than guessed at.
 async function handleSessionDrop(e, targetCard) {
   let dragged;
   try {
@@ -289,10 +280,10 @@ async function handleSessionDrop(e, targetCard) {
   } catch {
     return;
   }
-  if (!dragged || dragged.projectKey !== targetCard.projectKey || dragged.sessionId === targetCard.sessionId) return;
+  if (!dragged || dragged.sessionId === targetCard.sessionId) return;
 
   const orderedIds = Array.from(state.cardsById.values())
-    .filter((c) => c.projectKey === targetCard.projectKey && matchesFilter(c))
+    .filter(matchesFilter)
     .sort((a, b) => compareArrays(cardSortKey(a), cardSortKey(b)))
     .map((c) => c.sessionId);
 
@@ -330,49 +321,12 @@ function renderSessionList() {
   );
   document.title = needsYou > 0 ? `(${needsYou}) Claude Session Tracker` : 'Claude Session Tracker';
 
-  const visibleCards = allCards.filter(matchesFilter);
-  const orderedProjectKeys = Array.from(new Set(visibleCards.map((c) => c.projectKey))).sort((a, b) => {
-    const pa = state.projectsByKey.get(a);
-    const pb = state.projectsByKey.get(b);
-    const ra = pa && pa.priority !== null ? pa.priority : Infinity;
-    const rb = pb && pb.priority !== null ? pb.priority : Infinity;
-    if (ra !== rb) return ra - rb;
-    return a.localeCompare(b);
-  });
-
-  const byProject = new Map();
-  for (const c of visibleCards) {
-    if (!byProject.has(c.projectKey)) byProject.set(c.projectKey, []);
-    byProject.get(c.projectKey).push(c);
-  }
-
-  for (const projectKey of orderedProjectKeys) {
-    const cards = byProject.get(projectKey);
-    cards.sort((a, b) => compareArrays(cardSortKey(a), cardSortKey(b)));
-
-    const project = state.projectsByKey.get(projectKey);
-    const headerChildren = [el('span', { text: projectDisplayName(projectKey, cards[0].cwd) })];
-    if (project && project.adoTicketId && state.adoConfig.org && state.adoConfig.project) {
-      const url = `https://dev.azure.com/${state.adoConfig.org}/${state.adoConfig.project}/_workitems/edit/${project.adoTicketId}`;
-      headerChildren.push(el('a', { href: url, target: '_blank', text: `#${project.adoTicketId}` }));
-    }
-    headerChildren.push(el('span', { class: 'priority-btns' }, [
-      el('button', { title: 'Higher priority', text: '↑', onclick: () =>
-        apiWithToast('/api/projects/reorder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orderedKeys: movePriority(currentPriorityOrder(), projectKey, -1) }) }, 'Failed to reorder project')
-      }),
-      el('button', { title: 'Lower priority', text: '↓', onclick: () =>
-        apiWithToast('/api/projects/reorder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orderedKeys: movePriority(currentPriorityOrder(), projectKey, 1) }) }, 'Failed to reorder project')
-      }),
-    ]));
-
-    container.appendChild(el('div', { class: 'project-group' }, [
-      el('div', { class: 'project-header' }, headerChildren),
-      ...cards.map(renderCard),
-    ]));
-  }
+  const visibleCards = allCards.filter(matchesFilter).sort((a, b) => compareArrays(cardSortKey(a), cardSortKey(b)));
 
   if (visibleCards.length === 0) {
     container.appendChild(el('div', { class: 'empty-state', text: 'No sessions match this filter.' }));
+  } else {
+    for (const card of visibleCards) container.appendChild(renderCard(card));
   }
 }
 
