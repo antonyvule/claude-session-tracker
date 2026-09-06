@@ -117,6 +117,28 @@
   </div>
 </div>
 
+<div id="edit-session-modal" class="modal hidden">
+  <div class="modal-content">
+    <div class="panel-header">
+      <h2>Edit session</h2>
+      <button class="close-btn" data-close="edit-session-modal">&times;</button>
+    </div>
+    <label>Rename
+      <input id="edit-title-input" type="text" placeholder="Rename…" />
+    </label>
+    <label>Notes
+      <textarea id="edit-notes-input" rows="4"></textarea>
+    </label>
+    <label>Tags
+      <input id="edit-tags-input" type="text" placeholder="comma,separated,tags" />
+    </label>
+    <label class="pinned-label"><input id="edit-pinned-input" type="checkbox" /> Pinned</label>
+    <div class="modal-actions">
+      <button id="edit-save-btn">Save</button>
+    </div>
+  </div>
+</div>
+
 <script src="/vendor/xterm/xterm.js"></script>
 <script src="/vendor/xterm/addon-fit.js"></script>
 <script src="/app.js"></script>

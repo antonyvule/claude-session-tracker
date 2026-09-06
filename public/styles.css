@@ -243,14 +243,15 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   height: 100%;
   overflow: hidden;
 }
-.detail-header, .detail-footer {
+.detail-header {
   padding: 1.1rem 1.6rem;
   flex-shrink: 0;
   background: var(--surface);
+  border-bottom: 1px solid var(--border);
 }
-.detail-header { border-bottom: 1px solid var(--border); }
-.detail-footer { border-top: 1px solid var(--border); }
-#detail-title-text { color: var(--highlight); font-weight: 700; letter-spacing: -0.01em; margin: 0 0 0.8rem; overflow-wrap: break-word; }
+.detail-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.6rem; margin-bottom: 0.8rem; }
+#detail-title-text { color: var(--highlight); font-weight: 700; letter-spacing: -0.01em; margin: 0; overflow-wrap: break-word; }
+.edit-session-btn { flex-shrink: 0; font-size: 0.75rem; padding: 0.3rem 0.6rem; }
 .detail-transcript {
   flex: 1;
   min-height: 0;
@@ -308,13 +309,12 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 }
 .modal-note { font-size: 0.8rem; color: var(--text-faint); background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 0.5rem 0.7rem; margin: 0.5rem 0; }
 .modal-content label { display: block; margin: 0.5rem 0; font-size: 0.85rem; color: var(--text-dim); }
-.modal-content input, .modal-content select { width: 100%; margin-top: 0.2rem; }
+.modal-content input, .modal-content select, .modal-content textarea { width: 100%; margin-top: 0.2rem; box-sizing: border-box; }
 .modal-actions { display: flex; gap: 0.5rem; margin-top: 0.8rem; }
 
 .detail-row { margin-bottom: 0.9rem; overflow-wrap: break-word; }
 .detail-row label { display: block; font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-faint); margin-bottom: 0.3rem; }
 .detail-row textarea, .detail-row input { width: 100%; box-sizing: border-box; }
-.pinned-row { display: flex; align-items: center; justify-content: space-between; gap: 0.8rem; }
 .pinned-label { display: flex !important; align-items: center; gap: 0.4rem; font-family: var(--sans) !important; font-size: 0.85rem !important; text-transform: none !important; letter-spacing: normal !important; color: var(--text) !important; cursor: pointer; margin-bottom: 0 !important; }
 .pinned-label input { width: auto; }
 .preview-turn {
@@ -352,7 +352,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .action-btns { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.7rem 0; }
 .error { color: var(--danger); white-space: pre-wrap; }
 
-.terminal-panel { flex-shrink: 0; border-top: 1px solid var(--border); background: var(--surface); }
+.terminal-panel { flex-shrink: 0; border-top: 1px solid var(--border); background: var(--surface); padding-bottom: 1rem; }
 .terminal-toggle {
   display: block;
   width: 100%;
@@ -360,16 +360,26 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   background: none;
   border: none;
   border-radius: 0;
-  padding: 0.5rem 1.6rem;
+  padding: 0.7rem 1.6rem;
   font-family: var(--mono);
-  font-size: 0.75rem;
-  color: var(--text-dim);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--accent);
 }
-.terminal-toggle:hover { color: var(--accent); background: var(--accent-tint); }
-.terminal-container { height: 340px; padding: 0.4rem 1.6rem 0.6rem; box-sizing: border-box; }
+.terminal-toggle:hover { background: var(--accent-tint); }
+.terminal-container {
+  height: 480px;
+  margin: 0 1.6rem;
+  padding: 0.6rem;
+  box-sizing: border-box;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
 .terminal-container.hidden { display: none; }
-.terminal-container .xterm { height: 100%; }
-.terminal-container .xterm-viewport { background: transparent !important; }
+.terminal-inner { height: 100%; width: 100%; }
+.terminal-inner .xterm { height: 100%; width: 100%; }
+.terminal-inner .xterm-viewport { background: transparent !important; }
 
 .browse-list { max-height: 180px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); }
 .browse-item { padding: 0.35rem 0.55rem; cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; }

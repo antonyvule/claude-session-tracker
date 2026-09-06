@@ -42,6 +42,7 @@ const state = {
   // pane re-renders for a different session (the server-side PTY itself keeps
   // running regardless; only the browser's view of it disconnects).
   terminalSocket: null,
+  editingSessionId: null,
 };
 
 function el(tag, attrs = {}, children = []) {
@@ -407,21 +408,33 @@ function updateSelectedDetailHeader() {
 function buildTerminalPanel(sessionId, card) {
   const panel = el('div', { class: 'terminal-panel' });
   const toggleBtn = el('button', { class: 'terminal-toggle', text: '▸ Open live terminal' });
-  const termContainer = el('div', { class: 'terminal-container hidden' });
+  // The card's own border/padding live on .terminal-container; term.open()
+  // targets this separate, unpadded inner div instead. Passing the padded
+  // element straight to open() was the actual cause of the sizing mismatch —
+  // FitAddon measures the element it's given, so any padding on it gets
+  // double-counted against the CSS width/height:100% already accounting for
+  // that same padding, consistently oversizing the rendered terminal.
+  const termInner = el('div', { class: 'terminal-inner' });
+  const termContainer = el('div', { class: 'terminal-container hidden' }, [termInner]);
   panel.appendChild(toggleBtn);
   panel.appendChild(termContainer);
 
   let term = null;
   let fitAddon = null;
   let resizeObserver = null;
+  let refitTimer = null;
 
   function connect() {
     const term_ = new Terminal({ convertEol: true, fontSize: 13, scrollback: 5000 });
     fitAddon = new FitAddon.FitAddon();
     term_.loadAddon(fitAddon);
-    term_.open(termContainer);
-    fitAddon.fit();
+    term_.open(termInner);
     term = term_;
+
+    // The container was un-hidden this same tick, so its layout may not be
+    // settled yet — fitting immediately can measure a stale (often zero) size
+    // and mis-size the terminal. Wait a frame for the browser to catch up.
+    requestAnimationFrame(() => fitAddon.fit());
 
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const params = new URLSearchParams({ sessionId, cwd: card.cwd });
@@ -435,8 +448,21 @@ function buildTerminalPanel(sessionId, card) {
       } catch {
         return;
       }
-      if (msg.type === 'data') term_.write(msg.data);
-      else if (msg.type === 'exit') term_.write(`\r\n\x1b[2m[process exited, code ${msg.exitCode}]\x1b[0m\r\n`);
+      if (msg.type === 'data') {
+        term_.write(msg.data);
+        // FitAddon measures the container's width *before* a vertical
+        // scrollbar exists, so a fit computed while the terminal was still
+        // short (e.g. right when it opens) doesn't account for the ~15-17px
+        // a scrollbar claims once enough lines arrive to need one — content
+        // then renders wider than the now-scrollbar-narrowed visible area.
+        // Re-fitting shortly after each burst of output settles (debounced,
+        // not on every chunk) reflows already-written lines to the corrected
+        // width, including the scrollback replay that floods in on connect.
+        clearTimeout(refitTimer);
+        refitTimer = setTimeout(() => sendResize(), 150);
+      } else if (msg.type === 'exit') {
+        term_.write(`\r\n\x1b[2m[process exited, code ${msg.exitCode}]\x1b[0m\r\n`);
+      }
     });
     ws.addEventListener('close', (evt) => {
       if (evt.code === 1008) term_.write(`\r\n\x1b[2m[${evt.reason || 'connection closed'}]\x1b[0m\r\n`);
@@ -465,7 +491,7 @@ function buildTerminalPanel(sessionId, card) {
       termContainer.classList.remove('hidden');
       toggleBtn.textContent = '▾ Live terminal (collapse)';
       if (!term) connect();
-      else fitAddon.fit();
+      else requestAnimationFrame(() => fitAddon.fit());
     } else {
       termContainer.classList.add('hidden');
       toggleBtn.textContent = '▸ Open live terminal';
@@ -514,7 +540,10 @@ async function selectSession(sessionId) {
 
   // Fixed header: title, status, folder, actions, cost — always visible, never scrolls.
   const header = el('div', { class: 'detail-header' });
-  header.appendChild(el('h2', { id: 'detail-title-text', text: card.titleOverride || card.name || sessionId }));
+  header.appendChild(el('div', { class: 'detail-title-row' }, [
+    el('h2', { id: 'detail-title-text', text: card.titleOverride || card.name || sessionId }),
+    el('button', { class: 'edit-session-btn', text: '✏️ Edit', title: 'Rename, notes, tags, pin', onclick: () => openEditSessionModal(sessionId) }),
+  ]));
 
   const statusRow = el('div', { class: 'detail-row status-row' }, [el('label', { text: 'Status' })]);
   statusRow.appendChild(buildStatusSelect(sessionId, card));
@@ -554,36 +583,34 @@ async function selectSession(sessionId) {
   transcriptWrap.scrollTop = transcriptWrap.scrollHeight; // land on the latest messages, not the oldest
 
   body.appendChild(buildTerminalPanel(sessionId, card));
+}
 
-  // Fixed footer: rename/notes/tags/pin/save — always visible, never scrolls.
-  const footer = el('div', { class: 'detail-footer' });
-  const titleInput = el('input', { type: 'text', value: card.titleOverride || '', placeholder: 'Rename…' });
-  const notesArea = el('textarea', { rows: '2', text: card.notes || '' });
-  const tagsInput = el('input', { type: 'text', value: card.tags || '', placeholder: 'comma,separated,tags' });
-  const pinnedCheckbox = el('input', { type: 'checkbox' });
-  pinnedCheckbox.checked = Boolean(card.pinned);
+// ---------- Edit session modal (rename/notes/tags/pin) ----------
+function openEditSessionModal(sessionId) {
+  const card = state.cardsById.get(sessionId);
+  if (!card) return;
+  state.editingSessionId = sessionId;
+  document.getElementById('edit-title-input').value = card.titleOverride || '';
+  document.getElementById('edit-notes-input').value = card.notes || '';
+  document.getElementById('edit-tags-input').value = card.tags || '';
+  document.getElementById('edit-pinned-input').checked = Boolean(card.pinned);
+  document.getElementById('edit-session-modal').classList.remove('hidden');
+}
 
-  const saveBtn = el('button', { text: 'Save', onclick: () =>
-    apiWithToast(`/api/sessions/${sessionId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        title_override: titleInput.value || null,
-        notes: notesArea.value,
-        tags: tagsInput.value,
-        pinned: pinnedCheckbox.checked,
-      }),
-    }, 'Failed to save', 'Saved.')
-  });
-
-  footer.appendChild(el('div', { class: 'detail-row' }, [el('label', { text: 'Rename' }), titleInput]));
-  footer.appendChild(el('div', { class: 'detail-row' }, [el('label', { text: 'Notes' }), notesArea]));
-  footer.appendChild(el('div', { class: 'detail-row' }, [el('label', { text: 'Tags' }), tagsInput]));
-  footer.appendChild(el('div', { class: 'detail-row pinned-row' }, [
-    el('label', { class: 'pinned-label' }, [pinnedCheckbox, document.createTextNode('Pinned')]),
-    saveBtn,
-  ]));
-  body.appendChild(footer);
+async function saveSessionEdit() {
+  const sessionId = state.editingSessionId;
+  if (!sessionId) return;
+  const result = await apiWithToast(`/api/sessions/${sessionId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      title_override: document.getElementById('edit-title-input').value || null,
+      notes: document.getElementById('edit-notes-input').value,
+      tags: document.getElementById('edit-tags-input').value,
+      pinned: document.getElementById('edit-pinned-input').checked,
+    }),
+  }, 'Failed to save', 'Saved.');
+  if (result) closePanel('edit-session-modal');
 }
 
 function latestRunningInProject(projectKey) {
@@ -781,6 +808,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('new-session-btn').addEventListener('click', openNewSessionModal);
   document.getElementById('ns-launch-btn').addEventListener('click', launchNewSession);
   document.getElementById('ns-copy-btn').addEventListener('click', copyNewSessionCommand);
+  document.getElementById('edit-save-btn').addEventListener('click', saveSessionEdit);
   document.getElementById('help-btn').addEventListener('click', () => {
     document.getElementById('help-panel').classList.remove('hidden');
   });
@@ -807,6 +835,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     } else if (e.key === 'Escape') {
       closePanel('search-results');
       closePanel('new-session-modal');
+      closePanel('edit-session-modal');
       closePanel('help-panel');
     }
   });

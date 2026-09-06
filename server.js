@@ -223,7 +223,18 @@ app.post('/api/sessions/reorder', (req, res) => {
 });
 
 // --- Actions: spawn a PowerShell window running the relevant claude command ---
+// Resume reuses the exact same sessionId/transcript, so — unlike Fork, which
+// deliberately starts a new session and is fine to run alongside the
+// original — it's guarded against launching a second process against a
+// session the live poller already reports as running (ours, via the in-app
+// terminal, or an external terminal window). The "Already open" disabled
+// button is the client-side version of this same check; that alone isn't
+// enough since its data can lag up to one poll interval behind.
 app.post('/api/actions/resume', (req, res) => {
+  if (poller.getLiveMap().has(req.body.sessionId)) {
+    res.status(409).json({ ok: false, error: 'session is already running elsewhere' });
+    return;
+  }
   try {
     actions.resume(req.body.sessionId, req.body.cwd);
     res.json({ ok: true });
