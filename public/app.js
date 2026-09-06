@@ -404,40 +404,55 @@ function updateSelectedDetailHeader() {
 
 // Embeds a real interactive `claude --resume` session in the page via the
 // server's PTY (src/ptyManager.js) instead of opening a separate terminal
-// window. Collapsed by default; connecting is deferred until first opened.
+// window. The panel itself is always present (no collapse) so its layout is
+// already stable by the time a fit() ever runs; connecting only happens on
+// an explicit click, never just from viewing a session's history.
 function buildTerminalPanel(sessionId, card) {
   const panel = el('div', { class: 'terminal-panel' });
-  const toggleBtn = el('button', { class: 'terminal-toggle', text: '▸ Open live terminal' });
+  panel.appendChild(el('div', { class: 'terminal-label', text: 'Live terminal' }));
+
   // The card's own border/padding live on .terminal-container; term.open()
   // targets this separate, unpadded inner div instead. Passing the padded
-  // element straight to open() was the actual cause of the sizing mismatch —
+  // element straight to open() was an earlier cause of a sizing mismatch —
   // FitAddon measures the element it's given, so any padding on it gets
   // double-counted against the CSS width/height:100% already accounting for
-  // that same padding, consistently oversizing the rendered terminal.
+  // that same padding, oversizing the rendered terminal.
   const termInner = el('div', { class: 'terminal-inner' });
-  const termContainer = el('div', { class: 'terminal-container hidden' }, [termInner]);
-  panel.appendChild(toggleBtn);
+  const termContainer = el('div', { class: 'terminal-container' }, [termInner]);
+
+  const startBtn = el('button', { class: 'terminal-start-btn', text: '▶ Resume here', title: "Runs this session's claude --resume right in the page — no separate terminal window" });
+  const placeholder = el('div', { class: 'terminal-placeholder' }, [
+    el('div', { text: 'Not connected.' }),
+    startBtn,
+  ]);
+  termContainer.appendChild(placeholder);
   panel.appendChild(termContainer);
 
-  let term = null;
-  let fitAddon = null;
-  let resizeObserver = null;
+  let connected = false;
   let refitTimer = null;
 
   function connect() {
+    if (connected) return;
+    connected = true;
+    placeholder.remove();
+
     const term_ = new Terminal({ convertEol: true, fontSize: 13, scrollback: 5000 });
-    fitAddon = new FitAddon.FitAddon();
+    const fitAddon = new FitAddon.FitAddon();
     term_.loadAddon(fitAddon);
     term_.open(termInner);
-    term = term_;
-
-    // The container was un-hidden this same tick, so its layout may not be
-    // settled yet — fitting immediately can measure a stale (often zero) size
-    // and mis-size the terminal. Wait a frame for the browser to catch up.
-    requestAnimationFrame(() => fitAddon.fit());
+    // Unlike a collapsible panel, this container has been part of the
+    // visible, laid-out page since the detail pane first rendered — no
+    // just-unhidden-this-tick race, so fitting synchronously here already
+    // measures a stable, real size.
+    fitAddon.fit();
 
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const params = new URLSearchParams({ sessionId, cwd: card.cwd });
+    // Sending our real fitted size up front, instead of letting the PTY
+    // spawn at a hardcoded default, matters specifically for the scrollback
+    // buffer: whatever width the CLI's first output is written at gets
+    // permanently baked into replayed scrollback on every future reattach —
+    // a resize sent only *after* connecting can't retroactively rewrap it.
+    const params = new URLSearchParams({ sessionId, cwd: card.cwd, cols: term_.cols, rows: term_.rows });
     const ws = new WebSocket(`${proto}//${location.host}/ws/terminal?${params}`);
     state.terminalSocket = ws;
 
@@ -480,23 +495,10 @@ function buildTerminalPanel(sessionId, card) {
         ws.send(JSON.stringify({ type: 'resize', cols: term_.cols, rows: term_.rows }));
       }
     }
-    resizeObserver = new ResizeObserver(sendResize);
-    resizeObserver.observe(termContainer);
-    ws.addEventListener('open', sendResize);
+    new ResizeObserver(sendResize).observe(termContainer);
   }
 
-  toggleBtn.addEventListener('click', () => {
-    const isHidden = termContainer.classList.contains('hidden');
-    if (isHidden) {
-      termContainer.classList.remove('hidden');
-      toggleBtn.textContent = '▾ Live terminal (collapse)';
-      if (!term) connect();
-      else requestAnimationFrame(() => fitAddon.fit());
-    } else {
-      termContainer.classList.add('hidden');
-      toggleBtn.textContent = '▸ Open live terminal';
-    }
-  });
+  startBtn.addEventListener('click', connect);
 
   return panel;
 }

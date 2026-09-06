@@ -29,7 +29,17 @@ function trimScrollback(entry) {
 // this is a genuine interactive `claude` session, not a non-interactive one,
 // so permission prompts, Esc-to-interrupt, and Shift+Tab mode-switching all
 // work exactly as they do in an external terminal window.
-function open(sessionId, cwd) {
+//
+// cols/rows (only used for a fresh spawn — an existing entry keeps whatever
+// size it already has) should be the connecting client's real fitted size
+// where available. Whatever width the CLI's very first output is written at
+// gets permanently baked into this entry's scrollback buffer below — a
+// later 'resize' message reflows the *live* terminal going forward, but
+// can't retroactively rewrap bytes already recorded for replay on the next
+// reattach. Spawning close to the real size from the start avoids stale,
+// narrower-than-actual scrollback content for the common case of a client
+// connecting for the first time.
+function open(sessionId, cwd, cols, rows) {
   if (!actions.isValidSessionId(sessionId)) throw new Error('invalid sessionId');
   if (!actions.isValidCwd(cwd)) throw new Error('cwd no longer exists');
   actions.assertCwdAllowed(cwd);
@@ -40,8 +50,8 @@ function open(sessionId, cwd) {
   const command = `claude --resume ${actions.psQuote(sessionId)}`;
   const proc = pty.spawn('powershell.exe', ['-NoExit', '-Command', command], {
     name: 'xterm-color',
-    cols: 80,
-    rows: 24,
+    cols: Number.isInteger(cols) && cols > 0 ? cols : 80,
+    rows: Number.isInteger(rows) && rows > 0 ? rows : 24,
     cwd,
     env: actions.CLAUDE_ENV,
   });
