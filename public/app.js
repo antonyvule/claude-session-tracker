@@ -670,10 +670,15 @@ async function selectSession(sessionId) {
   function updateTerminalLayout() {
     const panel = terminalPanelHandle.panel;
     panel.classList.remove('fill', 'compact');
-    if (!historyExpanded) {
-      panel.classList.add('fill');
-    } else if (!terminalPanelHandle.isConnected()) {
+    // Idle (nothing to show) is always compact, whether history is open or
+    // not — there's no reason an empty placeholder should claim the whole
+    // pane just because history happens to be collapsed too. Only a
+    // connected terminal, which actually has content, claims the full
+    // space when history is collapsed.
+    if (!terminalPanelHandle.isConnected()) {
       panel.classList.add('compact');
+    } else if (!historyExpanded) {
+      panel.classList.add('fill');
     }
   }
 
