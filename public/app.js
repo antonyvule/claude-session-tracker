@@ -452,7 +452,6 @@ function buildTerminalPanel(sessionId, card) {
   // like it can't be done.
   function showPlaceholder(message) {
     connectionState = 'idle';
-    state.myOpenTerminalIds.delete(sessionId);
     placeholderMsg.textContent = message || 'Not connected.';
     termInner.replaceChildren();
     if (!termContainer.contains(placeholder)) termContainer.appendChild(placeholder);
@@ -511,12 +510,22 @@ function buildTerminalPanel(sessionId, card) {
         // The underlying pty is gone (src/ptyManager.js drops its entry on
         // exit) — back to idle so a fresh click spawns a genuinely new one,
         // instead of leaving a dead terminal with no way to retry.
+        state.myOpenTerminalIds.delete(sessionId);
         showPlaceholder(`Session ended (exit code ${msg.exitCode}).`);
       }
     });
     ws.addEventListener('close', (evt) => {
       if (state.terminalSocket === ws) state.terminalSocket = null;
-      if (connectionState !== 'idle') showPlaceholder(evt.code === 1008 ? evt.reason : null);
+      // Only a server-rejected handshake (1008) means this session isn't
+      // ours to reattach to anymore. Any other close (e.g. navigating to a
+      // different session, which closes this ws on purpose) doesn't mean
+      // the underlying pty stopped — keep it in myOpenTerminalIds so
+      // reselecting this session later reconnects instead of forgetting we
+      // ever had it open.
+      if (evt.code === 1008) {
+        state.myOpenTerminalIds.delete(sessionId);
+        if (connectionState !== 'idle') showPlaceholder(evt.reason);
+      }
     });
     ws.addEventListener('error', () => toast('Terminal connection error', true));
 
@@ -534,9 +543,6 @@ function buildTerminalPanel(sessionId, card) {
   }
 
   startBtn.addEventListener('click', connect);
-  // card.running alone would miss a session we ourselves just connected to
-  // moments ago (see myOpenTerminalIds above) — check both.
-  if (card.running || state.myOpenTerminalIds.has(sessionId)) connect();
 
   let lastKnownRunning = card.running;
   // Called on every SSE-driven header refresh (see updateSelectedDetailHeader)
@@ -554,7 +560,19 @@ function buildTerminalPanel(sessionId, card) {
     }
   }
 
-  return { panel, sessionId, refresh };
+  return {
+    panel,
+    sessionId,
+    refresh,
+    // Called by the caller once `panel` is actually attached to the
+    // document — fitAddon.fit() needs real layout to measure, so this can't
+    // run during construction, before termInner has a parent at all.
+    // card.running alone would miss a session we ourselves just connected
+    // to moments ago (see myOpenTerminalIds above), so it checks both.
+    connectIfRunning() {
+      if (card.running || state.myOpenTerminalIds.has(sessionId)) connect();
+    },
+  };
 }
 
 // ---------- Detail pane (right) ----------
@@ -641,6 +659,7 @@ async function selectSession(sessionId) {
   const terminalPanelHandle = buildTerminalPanel(sessionId, card);
   state.terminalPanelHandle = terminalPanelHandle;
   body.appendChild(terminalPanelHandle.panel);
+  terminalPanelHandle.connectIfRunning();
 }
 
 // ---------- Edit session modal (rename/notes/tags/pin) ----------
