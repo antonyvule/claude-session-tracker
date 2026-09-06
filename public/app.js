@@ -284,6 +284,7 @@ function renderCard(card) {
   return el('div', {
     class: isSelected ? 'card selected' : 'card',
     'data-status': card.status,
+    'data-running': card.running ? 'true' : 'false',
     'data-session-id': card.sessionId,
     draggable: 'true',
     onclick: () => selectSession(card.sessionId),
@@ -436,7 +437,7 @@ function updateSelectedDetailHeader() {
 // explicit click, or automatically once we learn (via refresh(), driven by
 // SSE updates) that the session just started running, so switching away
 // and back to an already-running session reconnects without re-clicking.
-function buildTerminalPanel(sessionId, card) {
+function buildTerminalPanel(sessionId, card, onStateChange) {
   const panel = el('div', { class: 'terminal-panel' });
   panel.appendChild(el('div', { class: 'section-label', text: 'Live terminal' }));
 
@@ -459,12 +460,21 @@ function buildTerminalPanel(sessionId, card) {
   // retry). 'connecting'/'connected': actively showing the terminal.
   let connectionState = 'idle';
 
+  // Also drives the panel's size: full space when history is collapsed
+  // regardless of this, but when history is expanded, connected gets the
+  // normal fixed size and idle shrinks to just fit the placeholder (see
+  // updateTerminalLayout in selectSession).
+  function setConnectionState(next) {
+    connectionState = next;
+    if (onStateChange) onStateChange(connectionState !== 'idle');
+  }
+
   // Reset back to the placeholder — used both for a rejected/ended
   // connection and (via refresh()) to clear a stale reason once the thing
   // that was blocking it stops being true, so a retry doesn't still look
   // like it can't be done.
   function showPlaceholder(message) {
-    connectionState = 'idle';
+    setConnectionState('idle');
     placeholderMsg.textContent = message || 'Not connected.';
     termInner.replaceChildren();
     if (!termContainer.contains(placeholder)) termContainer.appendChild(placeholder);
@@ -472,7 +482,7 @@ function buildTerminalPanel(sessionId, card) {
 
   function connect() {
     if (connectionState !== 'idle') return;
-    connectionState = 'connecting';
+    setConnectionState('connecting');
     placeholder.remove();
 
     const term_ = new Terminal({ convertEol: true, fontSize: 15, scrollback: 5000 });
@@ -497,7 +507,7 @@ function buildTerminalPanel(sessionId, card) {
     let refitTimer = null;
 
     ws.addEventListener('open', () => {
-      connectionState = 'connected';
+      setConnectionState('connected');
       state.myOpenTerminalIds.add(sessionId);
     });
     ws.addEventListener('message', (evt) => {
@@ -585,6 +595,7 @@ function buildTerminalPanel(sessionId, card) {
     connectIfRunning() {
       if (card.running || state.myOpenTerminalIds.has(sessionId)) connect();
     },
+    isConnected: () => connectionState !== 'idle',
   };
 }
 
@@ -651,11 +662,27 @@ async function selectSession(sessionId) {
   }
   body.appendChild(header);
 
+  // Space-sharing between the terminal and history: history collapsed ->
+  // terminal fills everything (connected or not); history expanded -> the
+  // terminal is full size while connected ("like now"), or shrinks to just
+  // fit the placeholder while idle so history gets the room instead.
+  let historyExpanded = loadHistoryExpanded();
+  function updateTerminalLayout() {
+    const panel = terminalPanelHandle.panel;
+    panel.classList.remove('fill', 'compact');
+    if (!historyExpanded) {
+      panel.classList.add('fill');
+    } else if (!terminalPanelHandle.isConnected()) {
+      panel.classList.add('compact');
+    }
+  }
+
   // Live terminal above the history, so a prompt sent here reads naturally
   // into the transcript below it once the turn lands on disk.
-  const terminalPanelHandle = buildTerminalPanel(sessionId, card);
+  const terminalPanelHandle = buildTerminalPanel(sessionId, card, updateTerminalLayout);
   state.terminalPanelHandle = terminalPanelHandle;
   body.appendChild(terminalPanelHandle.panel);
+  updateTerminalLayout();
   terminalPanelHandle.connectIfRunning();
 
   // Scrollable middle: only the transcript scrolls, everything else stays on screen.
@@ -671,12 +698,14 @@ async function selectSession(sessionId) {
   body.appendChild(historySection);
 
   function applyHistoryExpanded(expanded) {
+    historyExpanded = expanded;
     historyToggle.textContent = (expanded ? '▾ ' : '▸ ') + 'History';
     transcriptWrap.classList.toggle('hidden', !expanded);
     historySection.classList.toggle('expanded', expanded);
     if (expanded) transcriptWrap.scrollTop = transcriptWrap.scrollHeight; // land on the latest messages, not the oldest
+    updateTerminalLayout();
   }
-  applyHistoryExpanded(loadHistoryExpanded());
+  applyHistoryExpanded(historyExpanded);
   historyToggle.addEventListener('click', () => {
     const expanded = !historySection.classList.contains('expanded');
     localStorage.setItem('historyExpanded', expanded ? '1' : '0');

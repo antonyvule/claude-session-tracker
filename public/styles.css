@@ -210,6 +210,11 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .card:hover { border-color: var(--accent); }
 .card:active { cursor: grabbing; }
 .card.selected { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+/* Currently running is a stronger, distinct signal from the (often
+   auto-set) In Progress status color — green, matching the live dot,
+   so an actually-live session pops out from the rest of the list. */
+.card[data-running="true"] { border-left-color: var(--ok); border-left-width: 4px; background: var(--ok-tint); }
+.card[data-running="true"]:not(.selected) { box-shadow: 0 0 0 1px var(--ok); }
 .card-title { font-weight: 600; margin-bottom: 0.3rem; word-break: break-word; }
 .card.selected .card-title { color: var(--highlight); }
 .card-meta { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; color: var(--text-dim); font-family: var(--mono); font-size: 0.72rem; }
@@ -354,7 +359,13 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .action-btns { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.7rem 0; }
 .error { color: var(--danger); white-space: pre-wrap; }
 
-.terminal-panel { flex-shrink: 0; background: var(--surface); padding: 0.9rem 0 1rem; }
+.terminal-panel { flex-shrink: 0; background: var(--surface); padding: 0.9rem 0 1rem; display: flex; flex-direction: column; }
+/* History collapsed: terminal claims all remaining space, connected or not. */
+.terminal-panel.fill { flex: 1; min-height: 0; }
+.terminal-panel.fill .terminal-container { flex: 1; min-height: 0; height: auto; }
+/* History expanded but the terminal isn't connected: shrink it to just fit
+   the placeholder, so history gets the room instead of an empty box. */
+.terminal-panel.compact .terminal-container { height: 140px; }
 .section-label { padding: 0 1.6rem 0.5rem; font-family: var(--mono); font-size: 0.75rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-faint); }
 .history-section .section-label { padding-top: 0.9rem; }
 .collapsible-label {
