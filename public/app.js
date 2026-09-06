@@ -151,6 +151,12 @@ function connectSSE() {
       const existing = state.cardsById.get(msg.sessionId) || {};
       state.cardsById.set(msg.sessionId, { ...existing, ...msg.patch });
       renderAll();
+      // lastActiveMs only moves when the transcript file itself was written
+      // (see statusEngine.js) — a reliable "the history changed" signal,
+      // e.g. once a turn sent from the live terminal above actually lands.
+      if (msg.sessionId === state.selectedSessionId && Object.prototype.hasOwnProperty.call(msg.patch, 'lastActiveMs')) {
+        refreshTranscript(msg.sessionId);
+      }
     } else if (msg.type === 'session:remove') {
       state.cardsById.delete(msg.sessionId);
       if (state.selectedSessionId === msg.sessionId) state.selectedSessionId = null;
@@ -425,7 +431,7 @@ function updateSelectedDetailHeader() {
 // and back to an already-running session reconnects without re-clicking.
 function buildTerminalPanel(sessionId, card) {
   const panel = el('div', { class: 'terminal-panel' });
-  panel.appendChild(el('div', { class: 'terminal-label', text: 'Live terminal' }));
+  panel.appendChild(el('div', { class: 'section-label', text: 'Live terminal' }));
 
   // The card's own border/padding live on .terminal-container; term.open()
   // targets this separate, unpadded inner div instead. Passing the padded
@@ -632,34 +638,69 @@ async function selectSession(sessionId) {
 
   if (detail) {
     header.appendChild(el('div', { class: 'detail-row' }, [
-      el('label', { text: `Cost estimate (rough) — ${detail.turnCount} turns` }),
-      el('div', { text: `$${detail.costUsd.toFixed(4)}` }),
+      el('label', { id: 'detail-cost-label', text: `Cost estimate (rough) — ${detail.turnCount} turns` }),
+      el('div', { id: 'detail-cost-value', text: `$${detail.costUsd.toFixed(4)}` }),
     ]));
   }
   body.appendChild(header);
 
+  // Live terminal above the history, so a prompt sent here reads naturally
+  // into the transcript below it once the turn lands on disk.
+  const terminalPanelHandle = buildTerminalPanel(sessionId, card);
+  state.terminalPanelHandle = terminalPanelHandle;
+  body.appendChild(terminalPanelHandle.panel);
+  terminalPanelHandle.connectIfRunning();
+
   // Scrollable middle: only the transcript scrolls, everything else stays on screen.
+  const historySection = el('div', { class: 'history-section' });
+  historySection.appendChild(el('div', { class: 'section-label', text: 'History' }));
   const transcriptWrap = el('div', { class: 'detail-transcript' });
+  renderTranscriptTurns(transcriptWrap, detail);
+  historySection.appendChild(transcriptWrap);
+  body.appendChild(historySection);
+  transcriptWrap.scrollTop = transcriptWrap.scrollHeight; // land on the latest messages, not the oldest
+}
+
+function renderTranscriptTurns(container, detail) {
+  container.innerHTML = '';
   if (detail) {
     for (const turn of detail.turns) {
       const isUser = turn.role === 'user';
       const textEl = el('div', { class: 'turn-text' });
       textEl.innerHTML = renderMarkdown(turn.text);
-      transcriptWrap.appendChild(el('div', { class: 'preview-turn', 'data-role': turn.role }, [
+      container.appendChild(el('div', { class: 'preview-turn', 'data-role': turn.role }, [
         el('div', { class: 'role', text: isUser ? '🧑 You' : '🤖 Claude' }),
         textEl,
       ]));
     }
   } else {
-    transcriptWrap.appendChild(el('div', { text: 'No transcript on disk yet for this session.' }));
+    container.appendChild(el('div', { text: 'No transcript on disk yet for this session.' }));
   }
-  body.appendChild(transcriptWrap);
-  transcriptWrap.scrollTop = transcriptWrap.scrollHeight; // land on the latest messages, not the oldest
+}
 
-  const terminalPanelHandle = buildTerminalPanel(sessionId, card);
-  state.terminalPanelHandle = terminalPanelHandle;
-  body.appendChild(terminalPanelHandle.panel);
-  terminalPanelHandle.connectIfRunning();
+// Re-fetches and redraws just the transcript + cost estimate — called when
+// an SSE update reports the selected session's transcript file changed
+// (e.g. a turn just completed in the live terminal above), since that isn't
+// something updateSelectedDetailHeader's lighter per-field patching covers.
+async function refreshTranscript(sessionId) {
+  const transcriptWrap = document.querySelector('.detail-transcript');
+  if (!transcriptWrap || state.selectedSessionId !== sessionId) return;
+  let detail = null;
+  try {
+    detail = await api(`/api/sessions/${sessionId}/detail`);
+  } catch {
+    detail = null;
+  }
+  if (state.selectedSessionId !== sessionId) return; // switched away while fetching
+  renderTranscriptTurns(transcriptWrap, detail);
+  transcriptWrap.scrollTop = transcriptWrap.scrollHeight;
+
+  if (detail) {
+    const costLabel = document.getElementById('detail-cost-label');
+    const costValue = document.getElementById('detail-cost-value');
+    if (costLabel) costLabel.textContent = `Cost estimate (rough) — ${detail.turnCount} turns`;
+    if (costValue) costValue.textContent = `$${detail.costUsd.toFixed(4)}`;
+  }
 }
 
 // ---------- Edit session modal (rename/notes/tags/pin) ----------

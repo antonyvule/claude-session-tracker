@@ -252,6 +252,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .detail-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.6rem; margin-bottom: 0.8rem; }
 #detail-title-text { color: var(--highlight); font-weight: 700; letter-spacing: -0.01em; margin: 0; overflow-wrap: break-word; }
 .edit-session-btn { flex-shrink: 0; font-size: 0.75rem; padding: 0.3rem 0.6rem; }
+.history-section { flex: 1; min-height: 0; display: flex; flex-direction: column; border-top: 1px solid var(--border); }
 .detail-transcript {
   flex: 1;
   min-height: 0;
@@ -352,8 +353,9 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .action-btns { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.7rem 0; }
 .error { color: var(--danger); white-space: pre-wrap; }
 
-.terminal-panel { flex-shrink: 0; border-top: 1px solid var(--border); background: var(--surface); padding: 0.9rem 0 1rem; }
-.terminal-label { padding: 0 1.6rem 0.5rem; font-family: var(--mono); font-size: 0.75rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-faint); }
+.terminal-panel { flex-shrink: 0; background: var(--surface); padding: 0.9rem 0 1rem; }
+.section-label { padding: 0 1.6rem 0.5rem; font-family: var(--mono); font-size: 0.75rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-faint); }
+.history-section .section-label { padding-top: 0.9rem; }
 .terminal-container {
   height: 480px;
   margin: 0 1.6rem;
