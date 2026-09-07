@@ -81,7 +81,7 @@
     <h3>Other</h3>
     <dl class="help-list">
       <dt>Filters</dt><dd>"All" means all active work (To Do / In Progress / Blocked) — Done and Archived are deliberately excluded from it and only show via their own chips.</dd>
-      <dt>Reordering</dt><dd>Drag a session card onto another to set a manual order — it's a tiebreaker only; Needs You/Stale/Pinned still always float to the top.</dd>
+      <dt>Reordering</dt><dd>Drag a pinned session onto another pinned one to arrange your pinned favorites — manual order only applies within that group. Every other session always sorts by recency, so nothing you've reordered in the past can outrank a session that's more recently active.</dd>
       <dt>Window focus</dt><dd>All launches open as a new tab in your existing terminal window rather than a separate window, when possible. Bringing a window to the foreground from here is best-effort — Windows restricts background apps from stealing focus, so it can occasionally just select the session here instead of visibly focusing it.</dd>
     </dl>
   </div>
@@ -109,6 +109,7 @@
       <label>Model <input id="ns-model" type="text" placeholder="claude-sonnet-5" /></label>
       <label>Effort <input id="ns-effort" type="text" placeholder="high" /></label>
     </details>
+    <label class="pinned-label"><input id="ns-in-app" type="checkbox" checked /> Open in this app (uncheck to open in a new terminal window instead)</label>
     <div class="modal-actions">
       <button id="ns-launch-btn">Launch</button>
       <button id="ns-copy-btn">Copy command</button>

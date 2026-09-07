@@ -209,7 +209,12 @@ function cardSortKey(card) {
     card.pinned ? 0 : 1,
     card.needsAttention ? 0 : 1,
     card.stale ? 0 : 1,
-    card.orderIndex !== null && card.orderIndex !== undefined ? card.orderIndex : Infinity,
+    // Manual order only means anything within the pinned group — a small,
+    // deliberately curated set. Outside of it, recency always wins:
+    // otherwise a session dragged around once would permanently outrank
+    // every session that's never been touched that way, including a
+    // brand-new one, which never has a manual position to start with.
+    card.pinned && card.orderIndex !== null && card.orderIndex !== undefined ? card.orderIndex : Infinity,
     -card.lastActiveMs,
   ];
 }
@@ -310,6 +315,11 @@ async function handleSessionDrop(e, targetCard) {
     return;
   }
   if (!dragged || dragged.sessionId === targetCard.sessionId) return;
+  const draggedCard = state.cardsById.get(dragged.sessionId);
+  // Manual order only affects sort within the pinned group (see
+  // cardSortKey) — dragging a non-pinned card would silently save a
+  // position with no visible effect, which would just look broken.
+  if (!draggedCard || !draggedCard.pinned || !targetCard.pinned) return;
 
   const orderedIds = Array.from(state.cardsById.values())
     .filter(matchesFilter)
@@ -392,7 +402,19 @@ function buildActionBtns(card) {
   if (card.running) {
     actionBtns.appendChild(el('button', { disabled: 'true', text: `Already open (pid ${card.pid})`, title: 'This exact session is already running elsewhere' }));
   } else {
-    actionBtns.appendChild(el('button', { text: 'Resume', title: 'Reopen this exact session', onclick: () => runAction('resume', card) }));
+    actionBtns.appendChild(el('button', {
+      text: 'Resume',
+      title: 'Click: resume in the live terminal below. Right-click: open in a new terminal window instead.',
+      onclick: () => {
+        const handle = state.terminalPanelHandle;
+        if (handle && handle.sessionId === card.sessionId) handle.connect();
+        else runAction('resume', card);
+      },
+      oncontextmenu: (e) => {
+        e.preventDefault();
+        runAction('resume', card);
+      },
+    }));
   }
   actionBtns.appendChild(el('button', { text: 'Fork', title: 'Start a new session from this history, leaving this session untouched', onclick: () => runAction('fork', card) }));
   actionBtns.appendChild(el('button', { text: 'Continue latest in project', title: "Runs Claude Code's own \"continue most recent\" for this project — may land on a different session than this one", onclick: () => continueInProject(card.projectKey, card.cwd) }));
@@ -436,7 +458,10 @@ function updateSelectedDetailHeader() {
 // explicit click, or automatically once we learn (via refresh(), driven by
 // SSE updates) that the session just started running, so switching away
 // and back to an already-running session reconnects without re-clicking.
-function buildTerminalPanel(sessionId, card, onStateChange) {
+// newSessionOptions ({name, model, effort} or undefined) marks this as a
+// brand-new session with no history yet — the pty spawns fresh instead of
+// resuming (see server.js's /ws/terminal handler and ptyManager.openNew).
+function buildTerminalPanel(sessionId, card, onStateChange, newSessionOptions) {
   const panel = el('div', { class: 'terminal-panel' });
   panel.appendChild(el('div', { class: 'section-label', text: 'Live terminal' }));
 
@@ -501,6 +526,12 @@ function buildTerminalPanel(sessionId, card, onStateChange) {
     // permanently baked into replayed scrollback on every future reattach —
     // a resize sent only *after* connecting can't retroactively rewrap it.
     const params = new URLSearchParams({ sessionId, cwd: card.cwd, cols: term_.cols, rows: term_.rows });
+    if (newSessionOptions) {
+      params.set('new', '1');
+      if (newSessionOptions.name) params.set('name', newSessionOptions.name);
+      if (newSessionOptions.model) params.set('model', newSessionOptions.model);
+      if (newSessionOptions.effort) params.set('effort', newSessionOptions.effort);
+    }
     const ws = new WebSocket(`${proto}//${location.host}/ws/terminal?${params}`);
     state.terminalSocket = ws;
     let refitTimer = null;
@@ -594,12 +625,17 @@ function buildTerminalPanel(sessionId, card, onStateChange) {
     connectIfRunning() {
       if (card.running || state.myOpenTerminalIds.has(sessionId)) connect();
     },
+    // Exposed so the header's Resume button can trigger the same in-app
+    // connection directly — connect() itself already no-ops if not idle.
+    connect,
     isConnected: () => connectionState !== 'idle',
   };
 }
 
 // ---------- Detail pane (right) ----------
-async function selectSession(sessionId) {
+// newSessionOptions ({name, model, effort}), when given, means sessionId is
+// a freshly client-generated id with no history yet — see launchNewSession.
+async function selectSession(sessionId, newSessionOptions) {
   // Switching sessions (or re-rendering this one) tears down any open
   // in-app terminal view — the underlying PTY on the server keeps running
   // regardless; this only disconnects the browser's socket to it.
@@ -687,11 +723,16 @@ async function selectSession(sessionId) {
 
   // Live terminal above the history, so a prompt sent here reads naturally
   // into the transcript below it once the turn lands on disk.
-  const terminalPanelHandle = buildTerminalPanel(sessionId, card, updateTerminalLayout);
+  const terminalPanelHandle = buildTerminalPanel(sessionId, card, updateTerminalLayout, newSessionOptions);
   state.terminalPanelHandle = terminalPanelHandle;
   body.appendChild(terminalPanelHandle.panel);
   updateTerminalLayout();
-  terminalPanelHandle.connectIfRunning();
+  // A brand-new session isn't "running" yet by any of connectIfRunning's
+  // signals (no card.running, never in myOpenTerminalIds) — it needs an
+  // unconditional connect to actually start it, not just reattach to
+  // something already going.
+  if (newSessionOptions) terminalPanelHandle.connect();
+  else terminalPanelHandle.connectIfRunning();
 
   // Scrollable middle: only the transcript scrolls, everything else stays on screen.
   // Collapsible — collapsed by default, but remembers your choice (see
@@ -768,7 +809,7 @@ function openEditSessionModal(sessionId) {
   const card = state.cardsById.get(sessionId);
   if (!card) return;
   state.editingSessionId = sessionId;
-  document.getElementById('edit-title-input').value = card.titleOverride || '';
+  document.getElementById('edit-title-input').value = card.titleOverride || card.name || '';
   document.getElementById('edit-notes-input').value = card.notes || '';
   document.getElementById('edit-tags-input').value = card.tags || '';
   document.getElementById('edit-pinned-input').checked = Boolean(card.pinned);
@@ -898,12 +939,36 @@ async function launchNewSession() {
     errorEl.classList.remove('hidden');
     return;
   }
-  const payload = {
-    cwd: state.chosenFolder,
-    name: document.getElementById('ns-name').value || undefined,
-    model: document.getElementById('ns-model').value || undefined,
-    effort: document.getElementById('ns-effort').value || undefined,
-  };
+  const name = document.getElementById('ns-name').value || undefined;
+  const model = document.getElementById('ns-model').value || undefined;
+  const effort = document.getElementById('ns-effort').value || undefined;
+
+  if (document.getElementById('ns-in-app').checked) {
+    const sessionId = crypto.randomUUID();
+    state.cardsById.set(sessionId, {
+      sessionId,
+      cwd: state.chosenFolder,
+      titleOverride: name || '',
+      name: undefined,
+      status: 'todo',
+      running: false,
+      pid: undefined,
+      projectKey: undefined,
+      branch: undefined,
+      needsAttention: false,
+      stale: false,
+      pinned: false,
+      orderIndex: undefined,
+      lastActiveMs: Date.now(),
+      notes: '',
+      tags: '',
+    });
+    closePanel('new-session-modal');
+    selectSession(sessionId, { name, model, effort });
+    return;
+  }
+
+  const payload = { cwd: state.chosenFolder, name, model, effort };
   try {
     await api('/api/actions/new', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
     closePanel('new-session-modal');

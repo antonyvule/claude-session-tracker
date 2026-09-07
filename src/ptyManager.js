@@ -25,36 +25,15 @@ function trimScrollback(entry) {
   }
 }
 
-// Same command a real terminal launch would run (see actions.js's resume()) —
-// this is a genuine interactive `claude` session, not a non-interactive one,
-// so permission prompts, Esc-to-interrupt, and Shift+Tab mode-switching all
-// work exactly as they do in an external terminal window.
-//
-// cols/rows (only used for a fresh spawn — an existing entry keeps whatever
-// size it already has) should be the connecting client's real fitted size
-// where available. Whatever width the CLI's very first output is written at
-// gets permanently baked into this entry's scrollback buffer below — a
-// later 'resize' message reflows the *live* terminal going forward, but
-// can't retroactively rewrap bytes already recorded for replay on the next
-// reattach. Spawning close to the real size from the start avoids stale,
-// narrower-than-actual scrollback content for the common case of a client
-// connecting for the first time.
-function open(sessionId, cwd, cols, rows) {
-  if (!actions.isValidSessionId(sessionId)) throw new Error('invalid sessionId');
-  if (!actions.isValidCwd(cwd)) throw new Error('cwd no longer exists');
-  actions.assertCwdAllowed(cwd);
-
-  const existing = sessions.get(sessionId);
-  if (existing) return existing;
-
-  // No -NoExit here (unlike the external-terminal launch in actions.js) —
-  // this pty's whole purpose is to let the client detect when the session
-  // ends (/exit, a crash, anything) via proc.onExit below, so the UI can
-  // fall back to "Not connected" instead of showing a frozen, dead terminal
-  // forever. -NoExit would keep this wrapping shell alive after `claude`
-  // exits, masking the exit entirely — proc.onExit tracks this outer
-  // process, not the CLI specifically.
-  const command = `claude --resume ${actions.psQuote(sessionId)}`;
+// Shared by open() and openNew(): spawns the pty and wires up scrollback
+// recording, data broadcast, and exit detection. No -NoExit (unlike the
+// external-terminal launch in actions.js) — this pty's whole purpose is to
+// let the client detect when the session ends (/exit, a crash, anything)
+// via proc.onExit below, so the UI can fall back to "Not connected" instead
+// of showing a frozen, dead terminal forever. -NoExit would keep this
+// wrapping shell alive after `claude` exits, masking the exit entirely —
+// proc.onExit tracks this outer process, not the CLI specifically.
+function spawnEntry(sessionId, cwd, command, cols, rows) {
   const proc = pty.spawn('powershell.exe', ['-Command', command], {
     name: 'xterm-color',
     cols: Number.isInteger(cols) && cols > 0 ? cols : 80,
@@ -83,6 +62,50 @@ function open(sessionId, cwd, cols, rows) {
   });
 
   return entry;
+}
+
+// This is a genuine interactive `claude` session, not a non-interactive
+// one, so permission prompts, Esc-to-interrupt, and Shift+Tab mode-switching
+// all work exactly as they do in an external terminal window.
+//
+// cols/rows (only used for a fresh spawn — an existing entry keeps whatever
+// size it already has) should be the connecting client's real fitted size
+// where available. Whatever width the CLI's very first output is written at
+// gets permanently baked into this entry's scrollback buffer below — a
+// later 'resize' message reflows the *live* terminal going forward, but
+// can't retroactively rewrap bytes already recorded for replay on the next
+// reattach. Spawning close to the real size from the start avoids stale,
+// narrower-than-actual scrollback content for the common case of a client
+// connecting for the first time.
+function open(sessionId, cwd, cols, rows) {
+  if (!actions.isValidSessionId(sessionId)) throw new Error('invalid sessionId');
+  if (!actions.isValidCwd(cwd)) throw new Error('cwd no longer exists');
+  actions.assertCwdAllowed(cwd);
+
+  const existing = sessions.get(sessionId);
+  if (existing) return existing;
+
+  return spawnEntry(sessionId, cwd, `claude --resume ${actions.psQuote(sessionId)}`, cols, rows);
+}
+
+// Launches a brand-new session in-app instead of an external terminal.
+// sessionId is generated client-side (a fresh UUID) and passed to the CLI
+// via --session-id, so it's known upfront and this entry can be treated
+// exactly like any other resumable session from the start — no separate
+// "discover the session id after the fact" step needed.
+function openNew(sessionId, cwd, { name, model, effort } = {}, cols, rows) {
+  if (!actions.isValidSessionId(sessionId)) throw new Error('invalid sessionId');
+  if (!actions.isValidCwd(cwd)) throw new Error('folder does not exist');
+  actions.assertCwdAllowed(cwd);
+
+  const existing = sessions.get(sessionId);
+  if (existing) return existing;
+
+  const parts = [`--session-id ${actions.psQuote(sessionId)}`];
+  if (name) parts.push(`-n ${actions.psQuote(name)}`);
+  if (model) parts.push(`--model ${actions.psQuote(model)}`);
+  if (effort) parts.push(`--effort ${actions.psQuote(effort)}`);
+  return spawnEntry(sessionId, cwd, `claude ${parts.join(' ')}`, cols, rows);
 }
 
 // Replays recent scrollback on attach so a reconnect isn't a blank screen.
@@ -135,4 +158,4 @@ function closeAll() {
   for (const sessionId of Array.from(sessions.keys())) close(sessionId);
 }
 
-module.exports = { isOpen, open, subscribe, write, resize, close, closeAll };
+module.exports = { isOpen, open, openNew, subscribe, write, resize, close, closeAll };

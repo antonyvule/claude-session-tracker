@@ -317,6 +317,10 @@ wss.on('connection', (ws, req) => {
   const cwd = url.searchParams.get('cwd');
   const cols = parseInt(url.searchParams.get('cols'), 10);
   const rows = parseInt(url.searchParams.get('rows'), 10);
+  // A brand-new session launched in-app: sessionId is a client-generated
+  // UUID with no history yet, so there's nothing to resume — spawn fresh
+  // instead (see ptyManager.openNew).
+  const isNew = url.searchParams.get('new') === '1';
 
   if (!ptyManager.isOpen(sessionId)) {
     const live = poller.getLiveMap().get(sessionId);
@@ -330,7 +334,15 @@ wss.on('connection', (ws, req) => {
     // cols/rows only matter for a fresh spawn (see ptyManager.open) — the
     // client's actual fitted size, so the CLI's first output isn't
     // permanently baked into scrollback at some unrelated default width.
-    ptyManager.open(sessionId, cwd, cols, rows);
+    if (isNew) {
+      ptyManager.openNew(sessionId, cwd, {
+        name: url.searchParams.get('name') || undefined,
+        model: url.searchParams.get('model') || undefined,
+        effort: url.searchParams.get('effort') || undefined,
+      }, cols, rows);
+    } else {
+      ptyManager.open(sessionId, cwd, cols, rows);
+    }
   } catch (err) {
     ws.close(1008, err.message);
     return;
