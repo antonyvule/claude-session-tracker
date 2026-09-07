@@ -273,6 +273,15 @@ function renderFilterBar() {
 }
 
 // ---------- Session list (left pane) ----------
+// Every ~4s poll tick broadcasts a session:update for any running session
+// (lastActiveMs/needsAttention flicker even with no real change), and that
+// triggers a full renderSessionList() rebuild (innerHTML = '' + re-append).
+// Rebuilding out from under a native HTML5 drag mid-gesture silently kills
+// it, which is why drag-reorder felt flaky with multiple sessions running —
+// most drags take longer than one poll interval. Suppress that rebuild
+// while a drag is in flight and catch up once it ends.
+let sessionDragActive = false;
+
 function renderCard(card) {
   const title = card.titleOverride || card.name || `session ${card.sessionId.slice(0, 8)}`;
   const meta = [];
@@ -293,7 +302,15 @@ function renderCard(card) {
     draggable: 'true',
     onclick: () => selectSession(card.sessionId),
     ondragstart: (e) => {
+      sessionDragActive = true;
       e.dataTransfer.setData('text/plain', JSON.stringify({ sessionId: card.sessionId }));
+    },
+    // dragend always fires after dragstart, whether or not a drop actually
+    // happened (dropped outside a valid target, Esc, etc.), so this is the
+    // reliable place to resume rendering rather than only doing it in ondrop.
+    ondragend: () => {
+      sessionDragActive = false;
+      renderSessionList();
     },
     ondragover: (e) => e.preventDefault(),
     ondrop: (e) => {
@@ -332,6 +349,15 @@ async function handleSessionDrop(e, targetCard) {
   const toIdx = orderedIds.indexOf(targetCard.sessionId);
   orderedIds.splice(toIdx, 0, dragged.sessionId);
 
+  // Apply the new order locally right away — otherwise the list looks
+  // unchanged until the next ~4s poll broadcast round-trips order_index
+  // back from the server, which reads as the drag having done nothing.
+  orderedIds.forEach((sessionId, idx) => {
+    const card = state.cardsById.get(sessionId);
+    if (card) card.orderIndex = idx;
+  });
+  renderSessionList();
+
   await apiWithToast('/api/sessions/reorder', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -340,6 +366,9 @@ async function handleSessionDrop(e, targetCard) {
 }
 
 function renderSessionList() {
+  // See sessionDragActive above — a poll-driven rebuild mid-drag would kill
+  // the native drag gesture. ondragend calls this again once it's safe.
+  if (sessionDragActive) return;
   const container = document.getElementById('session-list');
   container.innerHTML = '';
 
