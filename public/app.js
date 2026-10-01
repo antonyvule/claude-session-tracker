@@ -564,6 +564,16 @@ function buildTerminalPanel(sessionId, card, onStateChange, newSessionOptions) {
     const ws = new WebSocket(`${proto}//${location.host}/ws/terminal?${params}`);
     state.terminalSocket = ws;
     let refitTimer = null;
+    // FitAddon.fit() calls term.resize(), which isn't just cosmetic — xterm
+    // reflows the buffer on every call, and growing rows even by one pulls
+    // that many lines out of scrollback into the live viewport (standard
+    // terminal behavior). Doing this after every single data message for
+    // the life of the connection (as opposed to just once, below) caused
+    // two real bugs: scrollback slowly eaten away over a long session as
+    // tiny subpixel-rounding drift nudged the computed row count up on
+    // each call, and a full reflow landing ~150ms after every keystroke's
+    // echo, which read as typing lag. Limit it to a single settle-fit.
+    let settledFit = false;
 
     ws.addEventListener('open', () => {
       setConnectionState('connected');
@@ -583,11 +593,18 @@ function buildTerminalPanel(sessionId, card, onStateChange, newSessionOptions) {
         // short (e.g. right when it opens) doesn't account for the ~15-17px
         // a scrollbar claims once enough lines arrive to need one — content
         // then renders wider than the now-scrollbar-narrowed visible area.
-        // Re-fitting shortly after each burst of output settles (debounced,
-        // not on every chunk) reflows already-written lines to the corrected
-        // width, including the scrollback replay that floods in on connect.
-        clearTimeout(refitTimer);
-        refitTimer = setTimeout(() => sendResize(), 150);
+        // Re-fitting once the initial scrollback-replay flood settles down
+        // (debounced) corrects that. Real resizes after this point (window
+        // resize, panel layout changes) are still handled by the
+        // ResizeObserver below — this one-shot settle is only for the
+        // connect-time replay, not every later message.
+        if (!settledFit) {
+          clearTimeout(refitTimer);
+          refitTimer = setTimeout(() => {
+            settledFit = true;
+            sendResize();
+          }, 150);
+        }
       } else if (msg.type === 'exit') {
         // The underlying pty is gone (src/ptyManager.js drops its entry on
         // exit) — back to idle so a fresh click spawns a genuinely new one,
