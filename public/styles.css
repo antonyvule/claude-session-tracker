@@ -415,6 +415,16 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .terminal-inner { height: 100%; width: 100%; }
 .terminal-inner .xterm { height: 100%; width: 100%; }
 .terminal-inner .xterm-viewport { background: transparent !important; }
+/* xterm 6.x's scrollbar is a Monaco-style overlay (.invisible by default,
+   pointer-events: none) that only fades in while actively scrolling/hovering
+   and fades back out within ~800ms — easy to miss entirely, and undraggable
+   while hidden, in a tool whose whole point is scrolling back through
+   history. Keep it always visible and interactive instead of relying on the
+   overlay's hover/scroll-triggered reveal. */
+.terminal-inner .xterm-scrollable-element > .scrollbar.vertical {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
 
 .browse-list { max-height: 180px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); }
 .browse-item { padding: 0.35rem 0.55rem; cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; }
