@@ -3,8 +3,14 @@ const actions = require('./actions');
 
 // Enough scrollback to redraw a reattached terminal (page refresh, or
 // collapse-then-reopen the panel) without letting memory grow unbounded for a
-// long-lived session.
-const SCROLLBACK_LIMIT_BYTES = 200 * 1024;
+// long-lived session. This is raw PTY bytes, not lines of text — Claude
+// Code's full-screen TUI repaints a lot (spinner frames, streaming tokens,
+// cursor repositioning), so a meaningful fraction of it is redundant
+// redraw/escape-code noise rather than unique content; the effective
+// backscroll this buys is noticeably less than its byte size suggests. It's
+// only meant to cover recent screen history for a reattach, not substitute
+// for the full transcript — see the History section for that.
+const SCROLLBACK_LIMIT_BYTES = 2 * 1024 * 1024;
 
 // One entry per sessionId with a live in-app terminal. The underlying `claude`
 // process is a real interactive session attached to a pseudo-terminal we own
