@@ -38,6 +38,17 @@
   --ok: #6fe0a0;
   --ok-tint: rgba(111, 224, 160, 0.14);
   --neutral-tint: rgba(163, 183, 217, 0.14);
+  /* Status pills/badges draw text on their own tint (status color at ~10-14%
+     opacity over the card surface), not the page background — a different
+     contrast check than the base token's other uses (links, borders, focus
+     rings). Dark mode's tint sits on a dark surface and already clears
+     4.5:1 with the base color, so these just mirror it; only light mode
+     (below) needs a separately darkened value — measured via the WCAG
+     relative-luminance formula against the real composited pill background. */
+  --accent-pill-text: var(--accent);
+  --danger-pill-text: var(--danger);
+  --ok-pill-text: var(--ok);
+  --warn-pill-text: var(--warn);
   --shadow-elevated: 0 1px 4px rgba(0, 0, 0, 0.35), 0 16px 40px rgba(0, 0, 0, 0.45);
   --radius: 10px;
   --mono: ui-monospace, "Cascadia Code", "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
@@ -67,6 +78,15 @@
     --ok: #1f9d63;
     --ok-tint: rgba(31, 157, 99, 0.1);
     --neutral-tint: rgba(69, 83, 110, 0.08);
+    /* Verified against the real composited pill background (status color at
+       10% opacity over --surface-2 #eaf1fb): the base hues above only reach
+       2.75-3.79:1 there, under the 4.5:1 minimum for this text size. Each
+       value here is the minimum darkening of its base hue that clears 4.5:1
+       while the pill's tint background stays exactly as it was. */
+    --accent-pill-text: #1b62bc; /* was #1f6fd6 (3.79:1) -> 4.63:1 */
+    --danger-pill-text: #af3b32; /* was #d6483d (3.35:1) -> 4.66:1 */
+    --ok-pill-text: #177449; /* was #1f9d63 (2.75:1) -> 4.59:1 */
+    --warn-pill-text: #a14e17; /* was #d9691f (2.77:1) -> 4.59:1 */
     --shadow-elevated: 0 1px 3px rgba(20, 30, 50, 0.08), 0 12px 28px rgba(20, 30, 50, 0.12);
   }
 }
@@ -180,9 +200,9 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* Status colours — shared by filter chips, list-item accents and the status dropdown */
 [data-status="todo"] { --status-color: var(--text-dim); --status-tint: var(--neutral-tint); }
-[data-status="in_progress"] { --status-color: var(--accent); --status-tint: var(--accent-tint); }
-[data-status="blocked"] { --status-color: var(--danger); --status-tint: var(--danger-tint); }
-[data-status="done"] { --status-color: var(--ok); --status-tint: var(--ok-tint); }
+[data-status="in_progress"] { --status-color: var(--accent-pill-text); --status-tint: var(--accent-tint); }
+[data-status="blocked"] { --status-color: var(--danger-pill-text); --status-tint: var(--danger-tint); }
+[data-status="done"] { --status-color: var(--ok-pill-text); --status-tint: var(--ok-tint); }
 [data-status="archived"] { --status-color: var(--text-dim); --status-tint: var(--neutral-tint); }
 
 #app-layout {
@@ -199,7 +219,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 /* ---------- View toggle ---------- */
 .view-toggle { display: flex; gap: 0.3rem; }
 .view-toggle-btn { display: inline-flex; align-items: center; gap: 0.4rem; border-radius: 999px; padding: 0.4rem 0.8rem; font-size: 0.8rem; }
-.view-toggle-btn.active { background: var(--accent-tint); color: var(--accent); border-color: var(--accent); }
+.view-toggle-btn.active { background: var(--accent-tint); color: var(--accent-pill-text); border-color: var(--accent-pill-text); }
 
 /* ---------- Board view ---------- */
 #board-pane {
@@ -372,9 +392,9 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
    dropdown options are the one place the original emoji (STATUS_ICONS)
    still appear — an inherent platform limitation, not an oversight. */
 .status-icon { stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
-.badge-needs-you { background: var(--warn-tint); color: var(--warn); border-color: var(--warn); }
-.badge-stale { background: var(--warn-tint); color: var(--warn); border-color: var(--warn); }
-.badge-pinned { background: var(--accent-tint); color: var(--accent); border-color: var(--accent); }
+.badge-needs-you { background: var(--warn-tint); color: var(--warn-pill-text); border-color: var(--warn-pill-text); }
+.badge-stale { background: var(--warn-tint); color: var(--warn-pill-text); border-color: var(--warn-pill-text); }
+.badge-pinned { background: var(--accent-tint); color: var(--accent-pill-text); border-color: var(--accent-pill-text); }
 
 #detail-pane {
   overflow: hidden;
