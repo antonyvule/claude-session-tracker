@@ -171,6 +171,88 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   height: calc(100vh - 57px);
   overflow: hidden;
 }
+/* Board mode collapses to one full-width column — #session-list-pane hides,
+   #board-pane fills it, and #detail-pane leaves the grid flow entirely via
+   position:fixed (see .board-overlay below) to become a slide-over instead. */
+#app-layout.board-mode { grid-template-columns: 1fr; }
+
+/* ---------- View toggle ---------- */
+.view-toggle { display: flex; gap: 0.3rem; }
+.view-toggle-btn { border-radius: 999px; padding: 0.4rem 0.8rem; font-size: 0.8rem; }
+.view-toggle-btn.active { background: var(--accent-tint); color: var(--accent); border-color: var(--accent); }
+
+/* ---------- Board view ---------- */
+#board-pane {
+  display: flex;
+  gap: 0.8rem;
+  padding: 0.9rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: var(--bg);
+}
+.board-column {
+  flex: 1 1 280px;
+  min-width: 240px;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.board-column-header {
+  padding: 0.7rem 0.9rem;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+}
+.board-column-count { color: var(--text-faint); font-weight: 400; text-transform: none; letter-spacing: normal; }
+.board-column-body { flex: 1; overflow-y: auto; padding: 0.6rem; min-height: 0; }
+.board-column-body.drop-target { background: var(--accent-tint); }
+
+/* Detail pane becomes a slide-over overlay while the board is active —
+   same DOM/rendering as list mode, only the CSS presentation changes. */
+#detail-pane.board-overlay {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(640px, 92vw);
+  z-index: 60;
+  box-shadow: var(--shadow-elevated);
+  border-left: 1px solid var(--border);
+  background: var(--bg);
+  transform: translateX(100%);
+  transition: transform 0.2s ease;
+}
+#detail-pane.board-overlay.open { transform: translateX(0); }
+#detail-close-btn {
+  position: absolute;
+  top: 0.7rem;
+  right: 1rem;
+  z-index: 2;
+  font-size: 1.2rem;
+  line-height: 1;
+  padding: 0.3rem 0.65rem;
+  border-radius: 999px;
+}
+/* Reserve room so the title row's Edit button doesn't collide with the
+   floating close button sitting on top of it. */
+#detail-pane.board-overlay .detail-header { padding-right: 3.4rem; }
+#detail-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 55;
+}
 
 #session-list-pane {
   background: var(--surface);

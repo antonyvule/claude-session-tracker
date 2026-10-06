@@ -29,6 +29,10 @@ function loadFilter() {
   return localStorage.getItem('sessionFilter') || 'active';
 }
 
+function loadViewMode() {
+  return localStorage.getItem('viewMode') === 'board' ? 'board' : 'list';
+}
+
 // Collapsed by default (a session is usually opened to use the live
 // terminal, not read back through history) but remembers the last choice
 // once you do open it, the same way the filter chip does.
@@ -47,6 +51,7 @@ const state = {
   selectedSessionId: null,
   chosenFolder: null,
   filter: loadFilter(),
+  viewMode: loadViewMode(),
   // The in-app terminal's WebSocket + xterm instance, if the panel is open for
   // the currently-selected session — closed and cleared whenever the detail
   // pane re-renders for a different session (the server-side PTY itself keeps
@@ -219,9 +224,36 @@ function connectSSE() {
 }
 
 function renderAll() {
-  renderSessionList();
+  if (state.viewMode === 'board') renderBoard();
+  else renderSessionList();
   if (state.selectedSessionId && state.cardsById.has(state.selectedSessionId)) {
     updateSelectedDetailHeader();
+  }
+}
+
+function closeDetailOverlay() {
+  document.getElementById('detail-pane').classList.remove('open');
+  document.getElementById('detail-backdrop').classList.add('hidden');
+}
+
+// Toggles between the list+detail layout and the full-width board, where
+// the detail pane becomes a slide-over instead (see .board-overlay in
+// styles.css) — same underlying rendering either way, only presentation
+// changes.
+function applyViewMode() {
+  const isBoard = state.viewMode === 'board';
+  document.getElementById('app-layout').classList.toggle('board-mode', isBoard);
+  document.getElementById('session-list-pane').classList.toggle('hidden', isBoard);
+  document.getElementById('board-pane').classList.toggle('hidden', !isBoard);
+  document.getElementById('detail-pane').classList.toggle('board-overlay', isBoard);
+  document.getElementById('detail-close-btn').classList.toggle('hidden', !isBoard);
+  document.getElementById('view-list-btn').classList.toggle('active', !isBoard);
+  document.getElementById('view-board-btn').classList.toggle('active', isBoard);
+  if (isBoard) {
+    renderBoard();
+  } else {
+    closeDetailOverlay();
+    renderSessionList();
   }
 }
 
@@ -318,7 +350,10 @@ function renderFilterBar() {
 // while a drag is in flight and catch up once it ends.
 let sessionDragActive = false;
 
-function renderCard(card) {
+// dropHandler lets the board view (see renderBoardCard) reuse this exact
+// rendering/drag-start logic while routing a drop to a cross-column status
+// change instead of the list's pinned-only reorder.
+function renderCard(card, dropHandler = handleSessionDrop) {
   const title = card.titleOverride || card.name || `session ${card.sessionId.slice(0, 8)}`;
   const meta = [];
   meta.push(el('span', { class: 'status-pill', 'data-status': card.status, text: `${STATUS_ICONS[card.status]} ${STATUS_LABELS[card.status]}`, title: STATUS_LABELS[card.status] }));
@@ -346,13 +381,14 @@ function renderCard(card) {
     // reliable place to resume rendering rather than only doing it in ondrop.
     ondragend: () => {
       sessionDragActive = false;
-      renderSessionList();
+      if (state.viewMode === 'board') renderBoard();
+      else renderSessionList();
     },
     ondragover: (e) => e.preventDefault(),
     ondrop: (e) => {
       e.preventDefault();
       e.stopPropagation();
-      handleSessionDrop(e, card);
+      dropHandler(e, card);
     },
   }, [
     el('div', { class: 'card-title', text: title }),
@@ -392,7 +428,8 @@ async function handleSessionDrop(e, targetCard) {
     const card = state.cardsById.get(sessionId);
     if (card) card.orderIndex = idx;
   });
-  renderSessionList();
+  if (state.viewMode === 'board') renderBoard();
+  else renderSessionList();
 
   await apiWithToast('/api/sessions/reorder', {
     method: 'POST',
@@ -401,14 +438,9 @@ async function handleSessionDrop(e, targetCard) {
   }, 'Failed to reorder');
 }
 
-function renderSessionList() {
-  // See sessionDragActive above — a poll-driven rebuild mid-drag would kill
-  // the native drag gesture. ondragend calls this again once it's safe.
-  if (sessionDragActive) return;
-  const container = document.getElementById('session-list');
-  container.innerHTML = '';
-
-  const allCards = Array.from(state.cardsById.values());
+// Shared by renderSessionList and renderBoard so the header stats stay
+// accurate regardless of which view is currently active.
+function renderHeaderCounts(allCards) {
   let running = 0;
   let needsYou = 0;
   for (const c of allCards) {
@@ -423,7 +455,8 @@ function renderSessionList() {
     onclick: () => {
       state.filter = 'needs-you';
       localStorage.setItem('sessionFilter', 'needs-you');
-      renderSessionList();
+      if (state.viewMode === 'board') renderBoard();
+      else renderSessionList();
       renderFilterBar();
     },
   };
@@ -444,6 +477,90 @@ function renderSessionList() {
     document.createTextNode(' total')
   );
   document.title = needsYou > 0 ? `(${needsYou}) Claude Session Tracker` : 'Claude Session Tracker';
+}
+
+// ---------- Board view (columns = status, cards = sessions) ----------
+const BOARD_STATUSES = ['todo', 'in_progress', 'blocked', 'done'];
+
+function renderBoardCard(card, status) {
+  return renderCard(card, (e, targetCard) => handleBoardDrop(e, status, targetCard));
+}
+
+async function handleBoardDrop(e, targetStatus, targetCard) {
+  let dragged;
+  try {
+    dragged = JSON.parse(e.dataTransfer.getData('text/plain'));
+  } catch {
+    return;
+  }
+  if (!dragged) return;
+  const draggedCard = state.cardsById.get(dragged.sessionId);
+  if (!draggedCard) return;
+
+  if (draggedCard.status !== targetStatus) {
+    // Cross-column drop: change status. Applied locally right away for the
+    // same instant-feedback reason as the pinned reorder fix above, then
+    // persisted via the exact endpoint the status dropdown already uses.
+    draggedCard.status = targetStatus;
+    renderBoard();
+    await apiWithToast(`/api/sessions/${dragged.sessionId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: targetStatus, manually_set: true }),
+    }, 'Failed to update status');
+    return;
+  }
+  // Same-column drop onto another card: the existing pinned-only reorder rule.
+  if (targetCard && targetCard.sessionId !== dragged.sessionId) handleSessionDrop(e, targetCard);
+}
+
+function renderBoard() {
+  if (state.viewMode !== 'board') return;
+  const allCards = Array.from(state.cardsById.values());
+  renderHeaderCounts(allCards);
+
+  const container = document.getElementById('board-pane');
+  container.innerHTML = '';
+  const needsYouOnly = state.filter === 'needs-you';
+
+  for (const status of BOARD_STATUSES) {
+    let columnCards = allCards.filter((c) => c.status === status);
+    if (needsYouOnly) columnCards = columnCards.filter((c) => c.needsAttention);
+    columnCards.sort((a, b) => compareArrays(cardSortKey(a), cardSortKey(b)));
+
+    const body = el('div', {
+      class: 'board-column-body',
+      ondragover: (e) => {
+        e.preventDefault();
+        body.classList.add('drop-target');
+      },
+      ondragleave: () => body.classList.remove('drop-target'),
+      ondrop: (e) => {
+        e.preventDefault();
+        body.classList.remove('drop-target');
+        handleBoardDrop(e, status, null);
+      },
+    }, columnCards.map((card) => renderBoardCard(card, status)));
+
+    container.appendChild(el('div', { class: 'board-column' }, [
+      el('div', { class: 'board-column-header' }, [
+        document.createTextNode(`${STATUS_ICONS[status]} ${STATUS_LABELS[status]}`),
+        el('span', { class: 'board-column-count', text: String(columnCards.length) }),
+      ]),
+      body,
+    ]));
+  }
+}
+
+function renderSessionList() {
+  // See sessionDragActive above — a poll-driven rebuild mid-drag would kill
+  // the native drag gesture. ondragend calls this again once it's safe.
+  if (sessionDragActive) return;
+  const container = document.getElementById('session-list');
+  container.innerHTML = '';
+
+  const allCards = Array.from(state.cardsById.values());
+  renderHeaderCounts(allCards);
 
   const visibleCards = allCards.filter(matchesFilter).sort((a, b) => compareArrays(cardSortKey(a), cardSortKey(b)));
 
@@ -749,14 +866,22 @@ async function selectSession(sessionId, newSessionOptions) {
   // Selecting a session (e.g. from a search result) whose status the current
   // filter hides would otherwise update the detail pane while leaving the list
   // showing no corresponding card at all — switch to the chip that matches it.
-  if (card && !matchesFilter(card)) {
+  // Doesn't apply to the board: every status already has its own column there.
+  if (state.viewMode !== 'board' && card && !matchesFilter(card)) {
     state.filter = card.status;
     localStorage.setItem('sessionFilter', state.filter);
     renderFilterBar();
   }
   state.selectedSessionId = sessionId;
-  renderSessionList(); // refresh selection highlight
-  const cardEl = document.querySelector(`.card[data-session-id="${sessionId}"]`);
+  if (state.viewMode === 'board') {
+    renderBoard(); // refresh selection highlight
+    document.getElementById('detail-pane').classList.add('open');
+    document.getElementById('detail-backdrop').classList.remove('hidden');
+  } else {
+    renderSessionList(); // refresh selection highlight
+  }
+  const activeContainer = document.getElementById(state.viewMode === 'board' ? 'board-pane' : 'session-list');
+  const cardEl = activeContainer.querySelector(`.card[data-session-id="${sessionId}"]`);
   if (cardEl) cardEl.scrollIntoView({ block: 'nearest' });
   const empty = document.getElementById('detail-empty');
   const body = document.getElementById('detail-body');
@@ -1154,7 +1279,21 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   renderFilterBar();
+  applyViewMode();
   connectSSE();
+
+  document.getElementById('view-list-btn').addEventListener('click', () => {
+    state.viewMode = 'list';
+    localStorage.setItem('viewMode', 'list');
+    applyViewMode();
+  });
+  document.getElementById('view-board-btn').addEventListener('click', () => {
+    state.viewMode = 'board';
+    localStorage.setItem('viewMode', 'board');
+    applyViewMode();
+  });
+  document.getElementById('detail-close-btn').addEventListener('click', closeDetailOverlay);
+  document.getElementById('detail-backdrop').addEventListener('click', closeDetailOverlay);
 
   document.getElementById('new-session-btn').addEventListener('click', openNewSessionModal);
   document.getElementById('ns-launch-btn').addEventListener('click', launchNewSession);
@@ -1188,6 +1327,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       closePanel('new-session-modal');
       closePanel('edit-session-modal');
       closePanel('help-panel');
+      closeDetailOverlay();
     }
   });
 

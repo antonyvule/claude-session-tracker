@@ -23,6 +23,10 @@
         <div id="search-results-list"></div>
       </div>
     </div>
+    <div class="view-toggle">
+      <button id="view-list-btn" class="view-toggle-btn active" title="List view">☰ List</button>
+      <button id="view-board-btn" class="view-toggle-btn" title="Board view">▦ Board</button>
+    </div>
     <button id="new-session-btn">+ New Session</button>
     <button id="help-btn" title="How this works">?</button>
   </div>
@@ -33,11 +37,14 @@
     <div id="filter-bar"></div>
     <div id="session-list"></div>
   </aside>
+  <section id="board-pane" class="hidden"></section>
   <section id="detail-pane">
+    <button id="detail-close-btn" class="hidden" title="Close">&times;</button>
     <div id="detail-empty" class="empty-state">Select a session to see its content.</div>
     <div id="detail-body" class="hidden"></div>
   </section>
 </main>
+<div id="detail-backdrop" class="hidden"></div>
 
 <div id="help-panel" class="panel hidden">
   <div class="panel-header">
