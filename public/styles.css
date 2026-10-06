@@ -171,6 +171,12 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   height: calc(100vh - 57px);
   overflow: hidden;
 }
+/* The Quick Terminals strip is a sibling below #app-layout, not inside its
+   grid, so #app-layout's own fixed viewport-relative height needs shrinking
+   by the same amount whenever the strip takes up real space — otherwise the
+   page would just grow taller than the viewport instead of the strip
+   visibly docking at the bottom. */
+body.has-quick-terminals #app-layout { height: calc(100vh - 57px - 230px); }
 /* Board mode collapses to one full-width column — #session-list-pane hides,
    #board-pane fills it, and #detail-pane leaves the grid flow entirely via
    position:fixed (see .board-overlay below) to become a slide-over instead. */
@@ -253,6 +259,68 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   background: rgba(0, 0, 0, 0.4);
   z-index: 55;
 }
+
+/* ---------- Quick Terminals strip ---------- */
+#quick-terminals-strip {
+  height: 230px;
+  display: flex;
+  gap: 0.6rem;
+  padding: 0.6rem;
+  overflow-x: auto;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+.quick-terminal-tile {
+  flex: 0 0 360px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--bg);
+}
+.quick-terminal-tile-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.6rem;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.quick-terminal-tile-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.quick-terminal-tile-title:hover { color: var(--accent); }
+.quick-terminal-close {
+  border: none;
+  background: none;
+  padding: 0.1rem 0.5rem;
+  font-size: 1rem;
+  line-height: 1;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+/* The tile is much smaller than the main detail pane's terminal, which these
+   rules are otherwise sized for (fixed 480px height, 1.6rem side margins). */
+.quick-terminal-tile .terminal-panel { flex: 1; min-height: 0; padding: 0; }
+.quick-terminal-tile .terminal-container { flex: 1; min-height: 0; height: auto; margin: 0; border: none; border-radius: 0; }
+
+.card-quick-terminal-btn {
+  border-radius: 999px;
+  padding: 0.05rem 0.4rem;
+  font-size: 0.7rem;
+  line-height: 1.4;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+.card-quick-terminal-btn.active { background: var(--accent-tint); border-color: var(--accent); }
 
 #session-list-pane {
   background: var(--surface);

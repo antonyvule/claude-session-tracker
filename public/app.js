@@ -33,6 +33,19 @@ function loadViewMode() {
   return localStorage.getItem('viewMode') === 'board' ? 'board' : 'list';
 }
 
+function loadQuickTerminalIds() {
+  try {
+    const raw = JSON.parse(localStorage.getItem('quickTerminalIds') || '[]');
+    return Array.isArray(raw) ? raw : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveQuickTerminalIds() {
+  localStorage.setItem('quickTerminalIds', JSON.stringify(Array.from(state.quickTerminalIds)));
+}
+
 // Collapsed by default (a session is usually opened to use the live
 // terminal, not read back through history) but remembers the last choice
 // once you do open it, the same way the filter chip does.
@@ -52,6 +65,12 @@ const state = {
   chosenFolder: null,
   filter: loadFilter(),
   viewMode: loadViewMode(),
+  // Sessions with a terminal open in the bottom Quick Terminals strip —
+  // separate from the single main-detail-pane terminal (state.terminalSocket)
+  // and from card.pinned (sort order). See buildTerminalPanel's
+  // registerAsMain option and toggleQuickTerminal.
+  quickTerminalIds: new Set(loadQuickTerminalIds()),
+  quickTerminalPanels: new Map(), // sessionId -> { tile, handle }
   // The in-app terminal's WebSocket + xterm instance, if the panel is open for
   // the currently-selected session — closed and cleared whenever the detail
   // pane re-renders for a different session (the server-side PTY itself keeps
@@ -175,6 +194,12 @@ function notifyNeedsAttention(card) {
 }
 
 // ---------- SSE ----------
+// Restoring persisted quick terminals needs state.cardsById populated
+// (the first snapshot) but must only run once — later snapshots (e.g. an
+// EventSource auto-reconnect) would otherwise re-open ones already connected,
+// creating a duplicate tile and a duplicate server-side subscriber.
+let quickTerminalsRestored = false;
+
 function connectSSE() {
   const es = new EventSource('/events');
   es.onmessage = (evt) => {
@@ -185,6 +210,15 @@ function connectSSE() {
       state.staleThresholdHours = msg.settings.staleThresholdHours;
       state.totalCostUsd = msg.settings.totalCostUsd;
       renderAll();
+      if (!quickTerminalsRestored) {
+        quickTerminalsRestored = true;
+        const persistedIds = Array.from(state.quickTerminalIds);
+        state.quickTerminalIds.clear(); // openQuickTerminal re-adds each valid one
+        for (const sessionId of persistedIds) {
+          if (state.cardsById.has(sessionId)) openQuickTerminal(sessionId);
+        }
+        saveQuickTerminalIds(); // drop any id whose session no longer exists
+      }
     } else if (msg.type === 'cost:update') {
       state.totalCostUsd = msg.totalCostUsd;
       renderSessionList();
@@ -363,6 +397,19 @@ function renderCard(card, dropHandler = handleSessionDrop) {
   if (card.needsAttention) meta.push(el('span', { class: 'badge badge-needs-you', text: 'Needs you', title: 'The assistant is waiting on a tool/permission approval with no reply yet' }));
   if (card.stale) meta.push(el('span', { class: 'badge badge-stale', text: 'Stale', title: 'Was In Progress but untouched past the stale threshold' }));
   if (card.pinned) meta.push(el('span', { class: 'badge badge-pinned', text: 'Pinned', title: 'Pinned — always sorts to the top of the list' }));
+  // Unrelated to the "Pinned" sort badge above — this opens/closes this
+  // session's own terminal in the Quick Terminals strip at the bottom,
+  // independent of whatever's shown in the main detail pane, so you can
+  // glance at or respond to a session without navigating away from
+  // whatever you're currently looking at.
+  meta.push(el('button', {
+    class: state.quickTerminalIds.has(card.sessionId) ? 'card-quick-terminal-btn active' : 'card-quick-terminal-btn',
+    title: state.quickTerminalIds.has(card.sessionId) ? 'Close quick terminal' : 'Open a quick terminal for this session without navigating away',
+    onclick: (e) => {
+      e.stopPropagation();
+      toggleQuickTerminal(card.sessionId);
+    },
+  }, [document.createTextNode('🖥️')]));
 
   const isSelected = card.sessionId === state.selectedSessionId;
   return el('div', {
@@ -667,9 +714,20 @@ function updateSelectedDetailHeader() {
 // newSessionOptions ({name, model, effort} or undefined) marks this as a
 // brand-new session with no history yet — the pty spawns fresh instead of
 // resuming (see server.js's /ws/terminal handler and ptyManager.openNew).
-function buildTerminalPanel(sessionId, card, onStateChange, newSessionOptions) {
+// opts.registerAsMain (default true): whether this panel's WebSocket becomes
+// state.terminalSocket, which selectSession() closes on every session
+// switch. Quick Terminals strip tiles pass false so navigating away from a
+// different session doesn't also sever a quick terminal's connection — the
+// backend already supports multiple independent subscribers to the same
+// pty (see ptyManager.js's subscribers Set), so this is a genuinely separate
+// connection, not a shared one.
+// opts.showLabel (default true): quick-terminal tiles supply their own
+// title bar, so the generic "Live terminal" section label would be redundant
+// there.
+function buildTerminalPanel(sessionId, card, onStateChange, newSessionOptions, opts = {}) {
+  const { registerAsMain = true, showLabel = true } = opts;
   const panel = el('div', { class: 'terminal-panel' });
-  panel.appendChild(el('div', { class: 'section-label', text: 'Live terminal' }));
+  if (showLabel) panel.appendChild(el('div', { class: 'section-label', text: 'Live terminal' }));
 
   // The card's own border/padding live on .terminal-container; term.open()
   // targets this separate, unpadded inner div instead. Passing the padded
@@ -689,6 +747,9 @@ function buildTerminalPanel(sessionId, card, onStateChange, newSessionOptions) {
   // 'idle': showing the placeholder, ready for a connect attempt (fresh or
   // retry). 'connecting'/'connected': actively showing the terminal.
   let connectionState = 'idle';
+  // Tracked separately from state.terminalSocket so close() below works
+  // correctly for a non-main (registerAsMain:false) panel too.
+  let currentWs = null;
 
   // Also drives the panel's size: full space when history is collapsed
   // regardless of this, but when history is expanded, connected gets the
@@ -739,7 +800,8 @@ function buildTerminalPanel(sessionId, card, onStateChange, newSessionOptions) {
       if (newSessionOptions.effort) params.set('effort', newSessionOptions.effort);
     }
     const ws = new WebSocket(`${proto}//${location.host}/ws/terminal?${params}`);
-    state.terminalSocket = ws;
+    currentWs = ws;
+    if (registerAsMain) state.terminalSocket = ws;
     let refitTimer = null;
     // FitAddon.fit() calls term.resize(), which isn't just cosmetic — xterm
     // reflows the buffer on every call, and growing rows even by one pulls
@@ -792,6 +854,7 @@ function buildTerminalPanel(sessionId, card, onStateChange, newSessionOptions) {
     });
     ws.addEventListener('close', (evt) => {
       if (state.terminalSocket === ws) state.terminalSocket = null;
+      if (currentWs === ws) currentWs = null;
       // Only a server-rejected handshake (1008) means this session isn't
       // ours to reattach to anymore. Any other close (e.g. navigating to a
       // different session, which closes this ws on purpose) doesn't mean
@@ -852,7 +915,72 @@ function buildTerminalPanel(sessionId, card, onStateChange, newSessionOptions) {
     // connection directly — connect() itself already no-ops if not idle.
     connect,
     isConnected: () => connectionState !== 'idle',
+    // Used by the Quick Terminals strip's close button — a client-initiated
+    // close (detach), not a server rejection, so it does NOT clear
+    // myOpenTerminalIds (see the close listener above): the underlying pty
+    // keeps running, reopening this quick terminal later just reattaches.
+    close() {
+      if (currentWs) currentWs.close();
+    },
   };
+}
+
+// ---------- Quick Terminals strip (bottom) ----------
+// Lets you glance at or respond to a session's live terminal without
+// navigating away from whatever's currently selected in the main detail
+// pane — each tile is a fully independent connection (see buildTerminalPanel's
+// registerAsMain option), so selecting a different session elsewhere doesn't
+// touch anything open here.
+function updateQuickTerminalsVisibility() {
+  const hasAny = state.quickTerminalIds.size > 0;
+  document.getElementById('quick-terminals-strip').classList.toggle('hidden', !hasAny);
+  document.body.classList.toggle('has-quick-terminals', hasAny);
+}
+
+function closeQuickTerminal(sessionId) {
+  state.quickTerminalIds.delete(sessionId);
+  saveQuickTerminalIds();
+  const entry = state.quickTerminalPanels.get(sessionId);
+  if (entry) {
+    entry.handle.close();
+    entry.tile.remove();
+    state.quickTerminalPanels.delete(sessionId);
+  }
+  updateQuickTerminalsVisibility();
+  if (state.viewMode === 'board') renderBoard();
+  else renderSessionList();
+}
+
+function openQuickTerminal(sessionId) {
+  const card = state.cardsById.get(sessionId);
+  if (!card) return;
+  const title = card.titleOverride || card.name || `session ${sessionId.slice(0, 8)}`;
+  const handle = buildTerminalPanel(sessionId, card, null, undefined, { registerAsMain: false, showLabel: false });
+  const tile = el('div', { class: 'quick-terminal-tile' }, [
+    el('div', { class: 'quick-terminal-tile-header' }, [
+      el('span', { class: 'quick-terminal-tile-title', text: title, title: `Open ${title} in the main pane`, onclick: () => selectSession(sessionId) }),
+      el('button', { class: 'quick-terminal-close', title: 'Close quick terminal (detaches — the session keeps running)', onclick: () => closeQuickTerminal(sessionId) }, [document.createTextNode('×')]),
+    ]),
+    handle.panel,
+  ]);
+  state.quickTerminalIds.add(sessionId);
+  state.quickTerminalPanels.set(sessionId, { tile, handle });
+  document.getElementById('quick-terminals-strip').appendChild(tile);
+  updateQuickTerminalsVisibility();
+  // fitAddon.fit() inside connect() needs the panel actually laid out in the
+  // document first (same reason selectSession calls connect() only after
+  // appending terminalPanelHandle.panel) — appendChild above already did that.
+  handle.connect();
+}
+
+function toggleQuickTerminal(sessionId) {
+  if (state.quickTerminalIds.has(sessionId)) {
+    closeQuickTerminal(sessionId);
+  } else {
+    openQuickTerminal(sessionId);
+    if (state.viewMode === 'board') renderBoard();
+    else renderSessionList();
+  }
 }
 
 // ---------- Detail pane (right) ----------
