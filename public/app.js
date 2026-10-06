@@ -968,7 +968,7 @@ async function selectSession(sessionId, newSessionOptions) {
   statusRow.appendChild(buildStatusSelect(sessionId, card));
   header.appendChild(statusRow);
 
-  const folderValue = [el('span', { text: card.cwd })];
+  const folderValue = [el('span', { class: 'detail-folder-path', text: card.cwd })];
   if (card.branch) {
     folderValue.push(el('span', { class: 'detail-branch', text: card.branch, title: `Git branch: ${card.branch}` }));
   }

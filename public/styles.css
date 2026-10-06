@@ -37,6 +37,16 @@
   --highlight-tint: rgba(124, 201, 255, 0.14);
   --ok: #6fe0a0;
   --ok-tint: rgba(111, 224, 160, 0.14);
+  /* Deliberately separate from --ok: that stays reserved for "active and
+     good right now" (the running dot, a live session's card border), while
+     Done means "finished, no longer needs attention" — the status that
+     should recede, not compete with what's actually live. Same distinction
+     GitHub Primer draws between fg.success and fg.done (a different color,
+     not just a dimmer version of success). Muted via HSL desaturation, then
+     independently verified against its own pill tint like every other
+     status color here. */
+  --done-color: #83b99a;
+  --done-tint: rgba(131, 185, 154, 0.14);
   --neutral-tint: rgba(163, 183, 217, 0.14);
   /* Named for where this started (status pills/badges draw text on their own
      tint, a different contrast check than the base token's other uses like
@@ -49,7 +59,6 @@
      relative-luminance formula against each element's real background. */
   --accent-pill-text: var(--accent);
   --danger-pill-text: var(--danger);
-  --ok-pill-text: var(--ok);
   --warn-pill-text: var(--warn);
   --shadow-elevated: 0 1px 4px rgba(0, 0, 0, 0.35), 0 16px 40px rgba(0, 0, 0, 0.45);
   --radius: 10px;
@@ -79,6 +88,13 @@
     --highlight-tint: rgba(15, 91, 184, 0.1);
     --ok: #1f9d63;
     --ok-tint: rgba(31, 157, 99, 0.1);
+    /* Same muting as dark mode's --done-color, independently re-verified
+       for light mode: the straightforward desaturation first tried only
+       reached 3.73:1 against its own tint, so lightness was lowered further
+       (152°, 30% saturation throughout, lightness 38% -> 32%) until it
+       cleared 4.5:1. */
+    --done-color: #396a53;
+    --done-tint: rgba(57, 106, 83, 0.1);
     --neutral-tint: rgba(69, 83, 110, 0.08);
     /* Verified against the real composited pill background (status color at
        10% opacity over --surface-2 #eaf1fb): the base hues above only reach
@@ -87,7 +103,6 @@
        while the pill's tint background stays exactly as it was. */
     --accent-pill-text: #1b62bc; /* was #1f6fd6 (3.79:1) -> 4.63:1 */
     --danger-pill-text: #af3b32; /* was #d6483d (3.35:1) -> 4.66:1 */
-    --ok-pill-text: #177449; /* was #1f9d63 (2.75:1) -> 4.59:1 */
     --warn-pill-text: #a14e17; /* was #d9691f (2.77:1) -> 4.59:1 */
     --shadow-elevated: 0 1px 3px rgba(20, 30, 50, 0.08), 0 12px 28px rgba(20, 30, 50, 0.12);
   }
@@ -204,7 +219,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 [data-status="todo"] { --status-color: var(--text-dim); --status-tint: var(--neutral-tint); }
 [data-status="in_progress"] { --status-color: var(--accent-pill-text); --status-tint: var(--accent-tint); }
 [data-status="blocked"] { --status-color: var(--danger-pill-text); --status-tint: var(--danger-tint); }
-[data-status="done"] { --status-color: var(--ok-pill-text); --status-tint: var(--ok-tint); }
+[data-status="done"] { --status-color: var(--done-color); --status-tint: var(--done-tint); }
 [data-status="archived"] { --status-color: var(--text-dim); --status-tint: var(--neutral-tint); }
 
 #app-layout {
@@ -485,6 +500,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .detail-row label { display: block; font-family: var(--sans); font-size: 0.68rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-faint); margin-bottom: 0.3rem; }
 .detail-row textarea, .detail-row input { width: 100%; box-sizing: border-box; }
 .detail-folder-value { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.detail-folder-path { font-family: var(--mono); }
 .detail-branch { font-family: var(--mono); font-size: 0.78rem; color: var(--text-faint); }
 .pinned-label { display: flex !important; align-items: center; gap: 0.4rem; font-family: var(--sans) !important; font-size: 0.85rem !important; text-transform: none !important; letter-spacing: normal !important; color: var(--text) !important; cursor: pointer; margin-bottom: 0 !important; }
 .pinned-label input { width: auto; }
