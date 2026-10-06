@@ -69,6 +69,9 @@ const STATUS_ICON_SHAPES = {
     { tag: 'rect', attrs: { x: 13.3, y: 4, width: 4.2, height: 12, rx: 1 } },
   ],
   edit: [{ tag: 'path', attrs: { d: 'M12.8 3.7l3.5 3.5L6.7 16.8H3.2v-3.5z' } }],
+  // A play triangle is conventionally solid, not outlined, so this overrides
+  // .status-icon's default stroke-only styling like the in_progress wedge does.
+  play: [{ tag: 'path', attrs: { d: 'M6 4 L16 10 L6 16 Z', fill: 'currentColor', stroke: 'none' } }],
 };
 function statusIconSvg(name, size = 14) {
   const svg = svgEl('svg', { class: 'status-icon', viewBox: '0 0 20 20', width: size, height: size });
@@ -733,7 +736,7 @@ function buildTerminalPanel(sessionId, card, onStateChange, newSessionOptions) {
   const termContainer = el('div', { class: 'terminal-container' }, [termInner]);
 
   const placeholderMsg = el('div', { text: 'Not connected.' });
-  const startBtn = el('button', { class: 'terminal-start-btn', text: '▶ Resume here', title: "Runs this session's claude --resume right in the page — no separate terminal window" });
+  const startBtn = el('button', { class: 'terminal-start-btn', title: "Runs this session's claude --resume right in the page — no separate terminal window" }, [statusIconSvg('play'), document.createTextNode('Resume here')]);
   const placeholder = el('div', { class: 'terminal-placeholder' }, [placeholderMsg, startBtn]);
   termContainer.appendChild(placeholder);
   panel.appendChild(termContainer);

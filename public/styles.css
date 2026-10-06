@@ -38,13 +38,15 @@
   --ok: #6fe0a0;
   --ok-tint: rgba(111, 224, 160, 0.14);
   --neutral-tint: rgba(163, 183, 217, 0.14);
-  /* Status pills/badges draw text on their own tint (status color at ~10-14%
-     opacity over the card surface), not the page background — a different
-     contrast check than the base token's other uses (links, borders, focus
-     rings). Dark mode's tint sits on a dark surface and already clears
-     4.5:1 with the base color, so these just mirror it; only light mode
-     (below) needs a separately darkened value — measured via the WCAG
-     relative-luminance formula against the real composited pill background. */
+  /* Named for where this started (status pills/badges draw text on their own
+     tint, a different contrast check than the base token's other uses like
+     borders/focus rings) but reused anywhere else the base hue turned out
+     too light for text once measured — links, help headers, .error — since
+     each was independently verified to still clear 4.5:1 on its own
+     background. Dark mode's tint sits on a dark surface and already clears
+     4.5:1 with the base color, so these just mirror it there; only light
+     mode (below) needs a separately darkened value — measured via the WCAG
+     relative-luminance formula against each element's real background. */
   --accent-pill-text: var(--accent);
   --danger-pill-text: var(--danger);
   --ok-pill-text: var(--ok);
@@ -519,7 +521,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .turn-text li { margin-bottom: 0.2rem; }
 .turn-text a { color: var(--accent-pill-text); }
 .action-btns { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.7rem 0; }
-.error { color: var(--danger); white-space: pre-wrap; }
+.error { color: var(--danger-pill-text); white-space: pre-wrap; }
 
 .terminal-panel { flex-shrink: 0; background: var(--surface); padding: 0.9rem 0 1rem; display: flex; flex-direction: column; }
 /* History collapsed: terminal claims all remaining space, connected or not. */
@@ -560,7 +562,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   color: var(--text-dim);
   font-size: 0.85rem;
 }
-.terminal-start-btn { font-size: 0.85rem; padding: 0.5rem 1rem; }
+.terminal-start-btn { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; padding: 0.5rem 1rem; }
 .terminal-inner { height: 100%; width: 100%; }
 .terminal-inner .xterm { height: 100%; width: 100%; }
 .terminal-inner .xterm-viewport { background: transparent !important; }
@@ -608,7 +610,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   box-shadow: var(--shadow-elevated);
   animation: toast-in 0.15s ease;
 }
-.toast-error { border-color: var(--danger); color: var(--danger); }
+.toast-error { border-color: var(--danger-pill-text); color: var(--danger-pill-text); }
 @keyframes toast-in {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
