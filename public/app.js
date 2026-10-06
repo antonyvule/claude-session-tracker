@@ -144,6 +144,28 @@ async function apiWithToast(url, opts, errorPrefix, successMessage) {
   }
 }
 
+// ---------- Desktop notifications ----------
+// Only for a genuine *transition* into needing attention (see the
+// session:update handler below, which compares against what this tab
+// already had — never for sessions that already needed you when a
+// snapshot/reconnect lands) and only while this tab isn't what the user is
+// actually looking at, since the in-app badge already covers the foreground
+// case and would otherwise double up with a desktop popup.
+function notifyNeedsAttention(card) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  if (!document.hidden && document.hasFocus()) return;
+  const title = card.titleOverride || card.name || `session ${card.sessionId.slice(0, 8)}`;
+  const n = new Notification(`${title} needs you`, {
+    body: 'Waiting on a tool/permission approval with no reply yet.',
+    tag: card.sessionId, // replaces any earlier notification for this session instead of stacking
+  });
+  n.onclick = () => {
+    window.focus();
+    selectSession(card.sessionId);
+    n.close();
+  };
+}
+
 // ---------- SSE ----------
 function connectSSE() {
   const es = new EventSource('/events');
@@ -156,7 +178,10 @@ function connectSSE() {
       renderAll();
     } else if (msg.type === 'session:update') {
       const existing = state.cardsById.get(msg.sessionId) || {};
+      const wasNeedsAttention = existing.needsAttention;
       state.cardsById.set(msg.sessionId, { ...existing, ...msg.patch });
+      const updatedCard = state.cardsById.get(msg.sessionId);
+      if (!wasNeedsAttention && updatedCard.needsAttention) notifyNeedsAttention(updatedCard);
       renderAll();
       // lastActiveMs only moves when the transcript file itself was written
       // (see statusEngine.js) — a reliable "the history changed" signal,
@@ -247,6 +272,10 @@ function projectLabelEl(card) {
 
 function matchesFilter(card) {
   if (state.filter === 'active') return ACTIVE_STATUSES.includes(card.status);
+  // Not a status chip — a virtual cross-status view reached only via the
+  // header's "N need you" count, since the thing that needs attention could
+  // be In Progress, Blocked, or anything else.
+  if (state.filter === 'needs-you') return card.needsAttention;
   return card.status === state.filter;
 }
 
@@ -381,11 +410,24 @@ function renderSessionList() {
   }
   const countsEl = document.getElementById('counts');
   countsEl.innerHTML = '';
+  const needsYouAttrs = {
+    class: state.filter === 'needs-you' ? 'needs-you-stat active' : 'needs-you-stat',
+    title: 'Show every session that needs you, regardless of its status',
+    onclick: () => {
+      state.filter = 'needs-you';
+      localStorage.setItem('sessionFilter', 'needs-you');
+      renderSessionList();
+      renderFilterBar();
+    },
+  };
+  if (needsYou === 0) needsYouAttrs.disabled = 'true';
   countsEl.append(
     el('span', { class: 'stat-num', text: String(running) }),
     document.createTextNode(' running · '),
-    el('span', { class: 'stat-num', text: String(needsYou) }),
-    document.createTextNode(' need you')
+    el('button', needsYouAttrs, [
+      el('span', { class: 'stat-num', text: String(needsYou) }),
+      document.createTextNode(' need you'),
+    ])
   );
   document.title = needsYou > 0 ? `(${needsYou}) Claude Session Tracker` : 'Claude Session Tracker';
 
@@ -1089,6 +1131,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     state.adoConfig = (await api('/api/config')).ado;
   } catch {
     // config endpoint unreachable at startup — list still renders without ADO links
+  }
+
+  // Asked once per browser profile (the browser remembers the answer, not
+  // us) — only if the user hasn't already granted or denied it.
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission();
   }
 
   renderFilterBar();
