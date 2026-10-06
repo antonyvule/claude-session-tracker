@@ -23,7 +23,60 @@ const ACTIVE_STATUSES = ['todo', 'in_progress', 'blocked'];
 const SEARCH_STATUS_ORDER = { in_progress: 0, blocked: 1, todo: 2, done: 3, archived: 4 };
 const FILTER_CHIPS = ['active', 'todo', 'in_progress', 'blocked', 'done', 'archived'];
 const FILTER_LABELS = { active: 'All', ...STATUS_LABELS };
+// STATUS_ICONS/FILTER_ICONS (emoji) are kept only for buildStatusSelect's
+// <option> elements below — a native <select> can't host SVG, so that's the
+// one place the old emoji icons still appear. Everywhere else uses the
+// inline SVG set built by statusIconSvg(), which inherits each status's
+// color via currentColor instead of carrying its own fixed emoji palette.
 const FILTER_ICONS = { active: '🗂️', ...STATUS_ICONS };
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+function svgEl(tag, attrs = {}) {
+  const node = document.createElementNS(SVG_NS, tag);
+  for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+  return node;
+}
+// Hand-drawn once at a 20x20 grid, stroked with currentColor (see .status-icon
+// in styles.css) so each one tints to match whatever status color it's shown
+// in, rather than carrying emoji's fixed multicolor rendering.
+const STATUS_ICON_SHAPES = {
+  active: [
+    { tag: 'line', attrs: { x1: 4, y1: 6, x2: 16, y2: 6 } },
+    { tag: 'line', attrs: { x1: 4, y1: 10, x2: 16, y2: 10 } },
+    { tag: 'line', attrs: { x1: 4, y1: 14, x2: 11, y2: 14 } },
+  ],
+  todo: [{ tag: 'circle', attrs: { cx: 10, cy: 10, r: 7 } }],
+  in_progress: [
+    { tag: 'circle', attrs: { cx: 10, cy: 10, r: 7 } },
+    { tag: 'path', attrs: { d: 'M10 10 L10 3.3 A6.7 6.7 0 0 1 15.7 13.3 Z', fill: 'currentColor', stroke: 'none' } },
+  ],
+  blocked: [
+    { tag: 'circle', attrs: { cx: 10, cy: 10, r: 7 } },
+    { tag: 'line', attrs: { x1: 5.6, y1: 14.4, x2: 14.4, y2: 5.6 } },
+  ],
+  done: [
+    { tag: 'circle', attrs: { cx: 10, cy: 10, r: 7 } },
+    { tag: 'path', attrs: { d: 'M6.6 10.2 L9 12.6 L13.4 7.6' } },
+  ],
+  archived: [
+    { tag: 'path', attrs: { d: 'M2.5 4.5h15v3h-15z' } },
+    { tag: 'path', attrs: { d: 'M3.5 7.5v8a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1v-8' } },
+    { tag: 'path', attrs: { d: 'M8 11h4' } },
+  ],
+  board: [
+    { tag: 'rect', attrs: { x: 2.5, y: 4, width: 4.2, height: 12, rx: 1 } },
+    { tag: 'rect', attrs: { x: 7.9, y: 4, width: 4.2, height: 7.5, rx: 1 } },
+    { tag: 'rect', attrs: { x: 13.3, y: 4, width: 4.2, height: 12, rx: 1 } },
+  ],
+  edit: [{ tag: 'path', attrs: { d: 'M12.8 3.7l3.5 3.5L6.7 16.8H3.2v-3.5z' } }],
+};
+function statusIconSvg(name, size = 14) {
+  const svg = svgEl('svg', { class: 'status-icon', viewBox: '0 0 20 20', width: size, height: size });
+  for (const shape of STATUS_ICON_SHAPES[name] || STATUS_ICON_SHAPES.todo) {
+    svg.appendChild(svgEl(shape.tag, shape.attrs));
+  }
+  return svg;
+}
 
 function loadFilter() {
   return localStorage.getItem('sessionFilter') || 'active';
@@ -326,7 +379,6 @@ function renderFilterBar() {
     const isActive = state.filter === key;
     const chip = el('button', {
       class: isActive ? 'filter-chip active' : 'filter-chip',
-      text: `${FILTER_ICONS[key]} ${FILTER_LABELS[key]}`,
       title: key === 'active' ? 'All active work — To Do, In Progress, Blocked. Done and Archived are excluded on purpose.' : `Show only ${STATUS_LABELS[key]}`,
       onclick: () => {
         state.filter = key;
@@ -334,7 +386,7 @@ function renderFilterBar() {
         renderSessionList();
         renderFilterBar();
       },
-    });
+    }, [statusIconSvg(key), document.createTextNode(FILTER_LABELS[key])]);
     if (key !== 'active' && key !== 'all') chip.setAttribute('data-status', key);
     bar.appendChild(chip);
   }
@@ -356,7 +408,7 @@ let sessionDragActive = false;
 function renderCard(card, dropHandler = handleSessionDrop) {
   const title = card.titleOverride || card.name || `session ${card.sessionId.slice(0, 8)}`;
   const meta = [];
-  meta.push(el('span', { class: 'status-pill', 'data-status': card.status, text: `${STATUS_ICONS[card.status]} ${STATUS_LABELS[card.status]}`, title: STATUS_LABELS[card.status] }));
+  meta.push(el('span', { class: 'status-pill', 'data-status': card.status, title: STATUS_LABELS[card.status] }, [statusIconSvg(card.status), document.createTextNode(STATUS_LABELS[card.status])]));
   meta.push(projectLabelEl(card));
   meta.push(el('span', { text: relativeTime(card.lastActiveMs), title: new Date(card.lastActiveMs).toLocaleString() }));
   if (card.running) meta.push(el('span', { class: 'dot', title: 'Currently running' }));
@@ -548,7 +600,7 @@ function renderBoard() {
 
     container.appendChild(el('div', { class: 'board-column' }, [
       el('div', { class: 'board-column-header' }, [
-        document.createTextNode(`${STATUS_ICONS[status]} ${STATUS_LABELS[status]}`),
+        el('span', { class: 'board-column-label' }, [statusIconSvg(status), document.createTextNode(STATUS_LABELS[status])]),
         el('span', { class: 'board-column-count', text: String(columnCards.length) }),
       ]),
       body,
@@ -906,7 +958,7 @@ async function selectSession(sessionId, newSessionOptions) {
   const header = el('div', { class: 'detail-header' });
   header.appendChild(el('div', { class: 'detail-title-row' }, [
     el('h2', { id: 'detail-title-text', text: card.titleOverride || card.name || sessionId }),
-    el('button', { class: 'edit-session-btn', text: '✏️ Edit', title: 'Rename, notes, tags, pin', onclick: () => openEditSessionModal(sessionId) }),
+    el('button', { class: 'edit-session-btn', title: 'Rename, notes, tags, pin', onclick: () => openEditSessionModal(sessionId) }, [statusIconSvg('edit'), document.createTextNode('Edit')]),
   ]));
 
   const statusRow = el('div', { class: 'detail-row status-row' }, [el('label', { text: 'Status' })]);
@@ -1255,8 +1307,7 @@ async function runSearch(query) {
       head.unshift(el('span', {
         class: 'status-pill',
         'data-status': card.status,
-        text: `${STATUS_ICONS[card.status]} ${STATUS_LABELS[card.status]}`,
-      }));
+      }, [statusIconSvg(card.status), document.createTextNode(STATUS_LABELS[card.status])]));
     }
     list.appendChild(el('div', {
       class: 'search-result',

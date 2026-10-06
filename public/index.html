@@ -24,8 +24,8 @@
       </div>
     </div>
     <div class="view-toggle">
-      <button id="view-list-btn" class="view-toggle-btn active" title="List view">☰ List</button>
-      <button id="view-board-btn" class="view-toggle-btn" title="Board view">▦ Board</button>
+      <button id="view-list-btn" class="view-toggle-btn active" title="List view"><svg class="status-icon" viewBox="0 0 20 20" width="14" height="14"><line x1="4" y1="6" x2="16" y2="6"/><line x1="4" y1="10" x2="16" y2="10"/><line x1="4" y1="14" x2="11" y2="14"/></svg>List</button>
+      <button id="view-board-btn" class="view-toggle-btn" title="Board view"><svg class="status-icon" viewBox="0 0 20 20" width="16" height="16"><rect x="2.5" y="4" width="4.2" height="12" rx="1"/><rect x="7.9" y="4" width="4.2" height="7.5" rx="1"/><rect x="13.3" y="4" width="4.2" height="12" rx="1"/></svg>Board</button>
     </div>
     <button id="new-session-btn">+ New Session</button>
     <button id="help-btn" title="How this works">?</button>
@@ -55,11 +55,11 @@
   <div class="help-section">
     <h3>Statuses</h3>
     <dl class="help-list">
-      <dt>📝 To Do</dt><dd>Not started or not touched recently; nothing suggests it's active.</dd>
-      <dt>🔄 In Progress</dt><dd>Auto-set whenever the CLI reports the session as live/running. Reverts automatically when it stops running, unless you've manually overridden the status (dragging or picking one yourself marks it "manually set" and the tracker stops auto-managing it).</dd>
-      <dt>🚫 Blocked</dt><dd>Manual only — set this yourself when you're stuck on something and want it to stand out from ordinary To Do work.</dd>
-      <dt>✅ Done</dt><dd>Manual only — never auto-suggested. Set it yourself once work is actually finished.</dd>
-      <dt>🗄️ Archived</dt><dd>Manual only, never auto-suggested. Archiving never touches the underlying transcript file — it's purely a status flag here.</dd>
+      <dt><svg class="status-icon" viewBox="0 0 20 20" width="14" height="14"><circle cx="10" cy="10" r="7"/></svg>To Do</dt><dd>Not started or not touched recently; nothing suggests it's active.</dd>
+      <dt><svg class="status-icon" viewBox="0 0 20 20" width="14" height="14"><circle cx="10" cy="10" r="7"/><path d="M10 10 L10 3.3 A6.7 6.7 0 0 1 15.7 13.3 Z" fill="currentColor" stroke="none"/></svg>In Progress</dt><dd>Auto-set whenever the CLI reports the session as live/running. Reverts automatically when it stops running, unless you've manually overridden the status (dragging or picking one yourself marks it "manually set" and the tracker stops auto-managing it).</dd>
+      <dt><svg class="status-icon" viewBox="0 0 20 20" width="14" height="14"><circle cx="10" cy="10" r="7"/><line x1="5.6" y1="14.4" x2="14.4" y2="5.6"/></svg>Blocked</dt><dd>Manual only — set this yourself when you're stuck on something and want it to stand out from ordinary To Do work.</dd>
+      <dt><svg class="status-icon" viewBox="0 0 20 20" width="14" height="14"><circle cx="10" cy="10" r="7"/><path d="M6.6 10.2 L9 12.6 L13.4 7.6"/></svg>Done</dt><dd>Manual only — never auto-suggested. Set it yourself once work is actually finished.</dd>
+      <dt><svg class="status-icon" viewBox="0 0 20 20" width="14" height="14"><path d="M2.5 4.5h15v3h-15z"/><path d="M3.5 7.5v8a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1v-8"/><path d="M8 11h4"/></svg>Archived</dt><dd>Manual only, never auto-suggested. Archiving never touches the underlying transcript file — it's purely a status flag here.</dd>
     </dl>
   </div>
 

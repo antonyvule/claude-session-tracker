@@ -1,0 +1,12 @@
+Vendored from Google Fonts (variable font, latin subset only — this app
+is English-only, so the cyrillic/greek/vietnamese subsets Google also
+serves aren't needed):
+  Inter v20 (variable, weight axis 100-900) -> Inter-Variable-latin.woff2
+
+To upgrade: fetch the CSS for the weights you need from
+https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap
+with a real browser User-Agent (Google serves woff2 URLs only to
+recognized browsers), take the "latin" block's src URL (requesting
+multiple weights together like this returns one variable-font file
+covering the whole range — that's intentional, not a bug), and download
+it to Inter-Variable-latin.woff2.
