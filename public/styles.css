@@ -125,7 +125,7 @@ body {
 /* The needs-you count is a genuine attention signal, not plain emphasis —
    keep it in the --warn family regardless of the button's own state, which
    otherwise loses to this ID-scoped rule's specificity. */
-#counts .needs-you-stat .stat-num { color: var(--warn); }
+#counts .needs-you-stat .stat-num { color: var(--warn-pill-text); }
 .needs-you-stat {
   font: inherit;
   color: inherit;
@@ -136,13 +136,13 @@ body {
   text-decoration: underline dotted;
   text-underline-offset: 3px;
 }
-.needs-you-stat:hover:not(:disabled) { color: var(--warn); }
-.needs-you-stat.active { color: var(--warn); text-decoration: none; }
+.needs-you-stat:hover:not(:disabled) { color: var(--warn-pill-text); }
+.needs-you-stat.active { color: var(--warn-pill-text); text-decoration: none; }
 .needs-you-stat:disabled { cursor: default; text-decoration: none; }
 #poll-banner {
   background: var(--warn-tint);
-  color: var(--warn);
-  border: 1px solid var(--warn);
+  color: var(--warn-pill-text);
+  border: 1px solid var(--warn-pill-text);
   padding: 0.2rem 0.6rem;
   border-radius: var(--radius);
   font-size: 0.8rem;
@@ -194,7 +194,7 @@ button {
   cursor: pointer;
   transition: border-color 0.15s ease, color 0.15s ease;
 }
-button:hover { border-color: var(--accent); color: var(--accent); }
+button:hover { border-color: var(--accent); color: var(--accent-pill-text); }
 button:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-glow); }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
 
@@ -326,8 +326,8 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 }
 .filter-chip.active {
   background: var(--status-tint, var(--accent-tint));
-  color: var(--status-color, var(--accent));
-  border-color: var(--status-color, var(--accent));
+  color: var(--status-color, var(--accent-pill-text));
+  border-color: var(--status-color, var(--accent-pill-text));
 }
 #session-list {
   flex: 1;
@@ -368,7 +368,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 }
 .card.selected .card-title { color: var(--highlight); }
 .card-meta { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; color: var(--text-dim); font-family: var(--mono); font-size: 0.72rem; }
-.card-meta a { color: var(--accent); text-decoration: none; }
+.card-meta a { color: var(--accent-pill-text); text-decoration: none; }
 .project-label { color: var(--text-faint); }
 .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; background: var(--ok); box-shadow: 0 0 0 2px var(--ok-tint); }
 .badge, .status-pill {
@@ -446,13 +446,13 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 }
 .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
 .close-btn { background: none; border: none; font-size: 1.3rem; padding: 0; border-radius: 0; }
-.close-btn:hover { color: var(--accent); }
+.close-btn:hover { color: var(--accent-pill-text); }
 
 #help-btn { border-radius: 999px; padding: 0.4rem 0.7rem; }
 .help-section { margin-bottom: 1.2rem; }
 .help-section h3 { font-family: var(--mono); font-size: 0.75rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--highlight); margin: 0 0 0.5rem; }
 .help-list { margin: 0; }
-.help-list dt { display: inline-flex; align-items: center; gap: 0.4rem; font-weight: 600; color: var(--accent); margin-top: 0.6rem; }
+.help-list dt { display: inline-flex; align-items: center; gap: 0.4rem; font-weight: 600; color: var(--accent-pill-text); margin-top: 0.6rem; }
 .help-list dd { margin: 0.15rem 0 0; font-size: 0.85rem; line-height: 1.5; color: var(--text-dim); }
 
 .modal {
@@ -506,7 +506,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   align-self: flex-start;
   border-radius: 14px 14px 14px 2px;
 }
-.preview-turn .role { font-family: var(--mono); font-weight: 600; font-size: 0.68rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent); margin-bottom: 0.3rem; }
+.preview-turn .role { font-family: var(--mono); font-weight: 600; font-size: 0.68rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent-pill-text); margin-bottom: 0.3rem; }
 .preview-turn[data-role="assistant"] .role { color: var(--highlight); }
 .preview-turn[data-role="user"] .role { text-align: right; }
 .turn-text { white-space: pre-wrap; }
@@ -517,7 +517,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .turn-text pre.md-code code { background: none; border: none; padding: 0; white-space: pre; }
 .turn-text ul, .turn-text ol { margin: 0.4rem 0; padding-left: 1.4rem; }
 .turn-text li { margin-bottom: 0.2rem; }
-.turn-text a { color: var(--accent); }
+.turn-text a { color: var(--accent-pill-text); }
 .action-btns { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.7rem 0; }
 .error { color: var(--danger); white-space: pre-wrap; }
 
@@ -538,7 +538,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   border: none;
   border-radius: 0;
 }
-.collapsible-label:hover { color: var(--accent); }
+.collapsible-label:hover { color: var(--accent-pill-text); }
 .terminal-container {
   height: 480px;
   margin: 0 1.6rem;
