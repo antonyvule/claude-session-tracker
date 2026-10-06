@@ -114,7 +114,7 @@ body {
   z-index: 10;
 }
 #header-strip h1 {
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 1rem;
   font-weight: 700;
   letter-spacing: -0.01em;
@@ -122,7 +122,7 @@ body {
   margin: 0;
   white-space: nowrap;
 }
-#counts { color: var(--text-dim); font-size: 0.9rem; white-space: nowrap; font-family: var(--mono); }
+#counts { color: var(--text-dim); font-size: 0.9rem; white-space: nowrap; font-family: var(--sans); }
 #counts .stat-num { color: var(--highlight); font-weight: 700; }
 /* The needs-you count is a genuine attention signal, not plain emphasis —
    keep it in the --warn family regardless of the button's own state, which
@@ -185,7 +185,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
 
 button {
   font: inherit;
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-weight: 600;
   font-size: 0.8rem;
   color: var(--text);
@@ -244,7 +244,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 }
 .board-column-header {
   padding: 0.7rem 0.9rem;
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -317,7 +317,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   gap: 0.4rem;
   border-radius: 999px;
   padding: 0.25rem 0.75rem;
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 0.7rem;
   font-weight: 600;
   letter-spacing: 0.03em;
@@ -369,7 +369,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   overflow: hidden;
 }
 .card.selected .card-title { color: var(--highlight); }
-.card-meta { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; color: var(--text-dim); font-family: var(--mono); font-size: 0.72rem; }
+.card-meta { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; color: var(--text-dim); font-family: var(--sans); font-size: 0.72rem; }
 .card-meta a { color: var(--accent-pill-text); text-decoration: none; }
 .project-label { color: var(--text-faint); }
 .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; background: var(--ok); box-shadow: 0 0 0 2px var(--ok-tint); }
@@ -379,7 +379,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   gap: 0.3rem;
   border-radius: 999px;
   padding: 0.05rem 0.55rem;
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 0.65rem;
   font-weight: 600;
   letter-spacing: 0.03em;
@@ -430,7 +430,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   flex-direction: column;
   gap: 0.5rem;
 }
-.empty-state { color: var(--text-faint); padding: 2rem; text-align: center; font-family: var(--mono); }
+.empty-state { color: var(--text-faint); padding: 2rem; text-align: center; font-family: var(--sans); }
 .status-select { border-left: 3px solid var(--status-color, var(--border)); }
 
 .panel {
@@ -452,7 +452,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 
 #help-btn { border-radius: 999px; padding: 0.4rem 0.7rem; }
 .help-section { margin-bottom: 1.2rem; }
-.help-section h3 { font-family: var(--mono); font-size: 0.75rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--highlight); margin: 0 0 0.5rem; }
+.help-section h3 { font-family: var(--sans); font-size: 0.75rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--highlight); margin: 0 0 0.5rem; }
 .help-list { margin: 0; }
 .help-list dt { display: inline-flex; align-items: center; gap: 0.4rem; font-weight: 600; color: var(--accent-pill-text); margin-top: 0.6rem; }
 .help-list dd { margin: 0.15rem 0 0; font-size: 0.85rem; line-height: 1.5; color: var(--text-dim); }
@@ -482,7 +482,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .modal-actions { display: flex; gap: 0.5rem; margin-top: 0.8rem; }
 
 .detail-row { margin-bottom: 0.9rem; overflow-wrap: break-word; }
-.detail-row label { display: block; font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-faint); margin-bottom: 0.3rem; }
+.detail-row label { display: block; font-family: var(--sans); font-size: 0.68rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-faint); margin-bottom: 0.3rem; }
 .detail-row textarea, .detail-row input { width: 100%; box-sizing: border-box; }
 .detail-folder-value { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
 .detail-branch { font-family: var(--mono); font-size: 0.78rem; color: var(--text-faint); }
@@ -508,7 +508,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   align-self: flex-start;
   border-radius: 14px 14px 14px 2px;
 }
-.preview-turn .role { font-family: var(--mono); font-weight: 600; font-size: 0.68rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent-pill-text); margin-bottom: 0.3rem; }
+.preview-turn .role { font-family: var(--sans); font-weight: 600; font-size: 0.68rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent-pill-text); margin-bottom: 0.3rem; }
 .preview-turn[data-role="assistant"] .role { color: var(--highlight); }
 .preview-turn[data-role="user"] .role { text-align: right; }
 .turn-text { white-space: pre-wrap; }
@@ -530,7 +530,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 /* History expanded but the terminal isn't connected: shrink it to just fit
    the placeholder, so history gets the room instead of an empty box. */
 .terminal-panel.compact .terminal-container { height: 140px; }
-.section-label { padding: 0 1.6rem 0.5rem; font-family: var(--mono); font-size: 0.75rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-faint); }
+.section-label { padding: 0 1.6rem 0.5rem; font-family: var(--sans); font-size: 0.75rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-faint); }
 .history-section .section-label { padding-top: 0.9rem; }
 .collapsible-label {
   display: block;
@@ -605,7 +605,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   color: var(--text);
   border-radius: 999px;
   padding: 0.5rem 1.1rem;
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 0.8rem;
   box-shadow: var(--shadow-elevated);
   animation: toast-in 0.15s ease;
