@@ -516,6 +516,10 @@ async function handleBoardDrop(e, targetStatus, targetCard) {
 
 function renderBoard() {
   if (state.viewMode !== 'board') return;
+  // Same reasoning as renderSessionList's guard — a poll-driven rebuild
+  // mid-drag would kill a native HTML5 drag in progress (reorder or
+  // cross-column status change). ondragend calls this again once it's safe.
+  if (sessionDragActive) return;
   const allCards = Array.from(state.cardsById.values());
   renderHeaderCounts(allCards);
 
