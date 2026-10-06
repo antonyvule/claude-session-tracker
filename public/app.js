@@ -40,6 +40,9 @@ const state = {
   cardsById: new Map(),
   projectsByKey: new Map(),
   staleThresholdHours: 24,
+  // All-time total across every session, cached server-side and pushed via
+  // the 'cost:update' SSE message — see historyScanner.getTotalCostUsd.
+  totalCostUsd: 0,
   adoConfig: { org: '', project: '' },
   selectedSessionId: null,
   chosenFolder: null,
@@ -175,7 +178,11 @@ function connectSSE() {
       state.cardsById = new Map(msg.cards.map((c) => [c.sessionId, c]));
       state.projectsByKey = new Map(msg.projects.map((p) => [p.projectKey, p]));
       state.staleThresholdHours = msg.settings.staleThresholdHours;
+      state.totalCostUsd = msg.settings.totalCostUsd;
       renderAll();
+    } else if (msg.type === 'cost:update') {
+      state.totalCostUsd = msg.totalCostUsd;
+      renderSessionList();
     } else if (msg.type === 'session:update') {
       const existing = state.cardsById.get(msg.sessionId) || {};
       const wasNeedsAttention = existing.needsAttention;
@@ -427,7 +434,14 @@ function renderSessionList() {
     el('button', needsYouAttrs, [
       el('span', { class: 'stat-num', text: String(needsYou) }),
       document.createTextNode(' need you'),
-    ])
+    ]),
+    document.createTextNode(' · '),
+    el('span', {
+      class: 'stat-num',
+      title: 'Rough all-time total across every session (same cost-estimate math as the detail pane)',
+      text: `$${state.totalCostUsd.toFixed(2)}`,
+    }),
+    document.createTextNode(' total')
   );
   document.title = needsYou > 0 ? `(${needsYou}) Claude Session Tracker` : 'Claude Session Tracker';
 

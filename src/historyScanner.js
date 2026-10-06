@@ -119,6 +119,34 @@ function getIndexEntry(sessionId) {
   return sessionIndex.get(sessionId) || null;
 }
 
+// Cost needs the whole file's usage summed — unlike needsAttention, there's
+// no cheap tail-read shortcut for it (peekNeedsAttention below). Cached per
+// session and invalidated only when its transcript's mtime actually changes
+// (sessionIndex already tracks that for free via the watcher), so the
+// all-sessions total can be recomputed on every poll tick without
+// re-parsing every file each time — only the ones that changed since.
+const costCache = new Map(); // sessionId -> { mtimeMs, costUsd }
+
+function getTotalCostUsd() {
+  let total = 0;
+  for (const [sessionId, info] of sessionIndex.entries()) {
+    const cached = costCache.get(sessionId);
+    let costUsd;
+    if (cached && cached.mtimeMs === info.mtimeMs) {
+      costUsd = cached.costUsd;
+    } else {
+      try {
+        costUsd = estimateCostUsd(summarizeUsage(parseJsonlLines(info.filePath)));
+      } catch {
+        costUsd = 0;
+      }
+      costCache.set(sessionId, { mtimeMs: info.mtimeMs, costUsd });
+    }
+    total += costUsd;
+  }
+  return total;
+}
+
 function knownProjectRoots() {
   const seen = new Map(); // cwd -> true
   for (const slugDir of new Set(Array.from(sessionIndex.values()).map((v) => v.slugDir))) {
@@ -344,6 +372,7 @@ function watchProjects({ onChange, rescanIntervalMs = 60000 }) {
     if (isSubagentTranscript(filePath)) return;
     const sessionId = sessionIdFromFile(filePath);
     sessionIndex.delete(sessionId);
+    costCache.delete(sessionId);
     onChange({ type: 'unlink', sessionId });
   });
 
@@ -355,6 +384,7 @@ module.exports = {
   scanAll,
   listHistoricalSessions,
   getIndexEntry,
+  getTotalCostUsd,
   knownProjectRoots,
   parseSessionDetail,
   peekNeedsAttention,

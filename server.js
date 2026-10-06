@@ -88,6 +88,7 @@ actions.configure(settings);
 
 let lastCardsById = new Map();
 let lastProjectsJson = '[]';
+let lastTotalCostUsd = 0;
 
 function recomputeAndBroadcast() {
   const liveMap = poller.getLiveMap();
@@ -118,13 +119,21 @@ function recomputeAndBroadcast() {
     lastProjectsJson = projectsJson;
     sse.broadcast({ type: 'projects:update', projects });
   }
+
+  // Cheap to call every tick — see historyScanner.getTotalCostUsd, which only
+  // re-parses a session's transcript when its mtime actually changed.
+  const totalCostUsd = historyScanner.getTotalCostUsd();
+  if (totalCostUsd !== lastTotalCostUsd) {
+    lastTotalCostUsd = totalCostUsd;
+    sse.broadcast({ type: 'cost:update', totalCostUsd });
+  }
 }
 
 function getSnapshot() {
   return {
     cards: Array.from(lastCardsById.values()),
     projects: JSON.parse(lastProjectsJson),
-    settings: { staleThresholdHours: settings.staleThresholdHours },
+    settings: { staleThresholdHours: settings.staleThresholdHours, totalCostUsd: lastTotalCostUsd },
   };
 }
 
