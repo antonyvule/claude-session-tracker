@@ -6,10 +6,12 @@
 
 A local dashboard for tracking Claude Code CLI sessions across every project on this
 machine — status, notes, tags, and a "needs you" flag that Claude Code's own session
-list doesn't provide. Layout: a filterable, colour-coded session list on the left (a
-single flat list, most recently active first, with pinning and manual drag reorder),
-showing each session's project/repo; the selected session's full transcript, cost
-estimate, status control, and actions on the right.
+list doesn't provide. Two interchangeable views: a flat, filterable list (most recently
+active first, with pinning and manual drag reorder) or a full-width kanban board (one
+column per status, drag a card to a different column to change its status). Either
+way, selecting a session opens its full transcript, cost estimate, status control,
+actions, and an embedded live terminal on the right — or as a slide-over panel on top
+of the board, in Board view.
 
 It's a plain Node/Express server + a no-framework browser UI, not a desktop app. The
 server is the only thing resident all the time (tens of MB RAM, near-zero idle CPU);
@@ -34,39 +36,74 @@ the browser tab costs nothing extra since a browser is already running anyway.
 
 ## ✨ Features
 
+**Header bar**
+- Live counts: how many sessions are currently running, how many **need you**, and a
+  rough all-time cost total across every session (cached per-session, only
+  recomputed when that session's transcript actually changes — see
+  [📡 Data sources](#-data-sources)).
+- The **need you** count is itself a button — click it to filter straight to every
+  session that needs attention, regardless of status (a Blocked or In Progress
+  session needing you is still a click away, not hidden behind the wrong chip).
+- **Desktop notification** when a session newly starts needing you while the tab
+  isn't focused (never for one that already needed you when the page loaded/
+  reconnected, and never while you're actually looking at the tab — the in-app badge
+  already covers that). Clicking the notification focuses the tab and opens that
+  session. Asked for once per browser profile the first time the page loads.
+
+**List ↔ Board toggle**
+- **List** — a single flat list, most recently active first, no project grouping.
+- **Board** — a full-width kanban view, one column per status (To Do / In Progress /
+  Blocked / Done — Archived stays hidden, same convention as the "All" chip). Drag a
+  card into a different column to change its status (the same action the Status
+  dropdown triggers); dragging within a column still only reorders if both cards are
+  pinned, identically to the list below. Selecting a card opens the same detail pane
+  as List view, as a slide-over panel on top of the board (close button, click the
+  backdrop, or `Esc`).
+- Your choice persists across reloads. Either view shows the same underlying data —
+  switching back and forth never loses anything.
+
 **Session list (left pane)**
-- A single flat list, most recently active first — no project grouping. Each card
-  shows its project/repo name (with the linked ADO ticket, if any) next to the status
-  pill, so you can still tell sessions from different projects apart at a glance.
+- Each card shows its project/repo name (with the linked ADO ticket, if any) next to
+  the status pill, so you can still tell sessions from different projects apart at a
+  glance.
 - Filter chips at the top: **All** (To Do / In Progress / Blocked — Done and Archived
-  are deliberately excluded from "All"), plus one chip per status.
+  are deliberately excluded from "All"), plus one chip per status. (List view only —
+  Board view's columns are the status filter.)
 - Each card is a fixed height (long titles clamp with an ellipsis, so the list
-  stays visually consistent) and shows: a colour-coded status pill (📝 To Do,
-  🔄 In Progress, 🚫 Blocked, ✅ Done, 🗄️ Archived), project name, relative
-  last-active time (absolute on hover), a live dot when running, and badges for
-  **Needs You**, **Stale**, and **Pinned**. Status is only ever auto-set for
+  stays visually consistent) and shows: a colour-coded status pill (a small tinted
+  icon — outline circle for To Do, a filled wedge for In Progress, a slash for
+  Blocked, a check for Done, a box for Archived — plus the label), project name,
+  relative last-active time (absolute on hover), a live dot when running, and badges
+  for **Needs You**, **Stale**, and **Pinned**. Status is only ever auto-set for
   "running → In Progress"; Done and Archived are explicit-only and never
   auto-suggested. An In Progress session that goes idle past the stale threshold
   gets a **Stale** badge without its status changing — an untouched To
   Do/Blocked is simply left as-is. Git branch moved to the detail pane (next to
   Folder) to keep the card itself uncluttered.
-- Drag a card onto another anywhere in the list to set a manual order — it's a
-  tiebreaker only; Needs You/Stale/Pinned still always float to the top regardless.
+- Drag a card onto another anywhere in the list to set a manual order — it only takes
+  effect between two **pinned** cards (dragging a non-pinned card is a no-op by
+  design, since manual order would otherwise silently lose to recency with no visible
+  effect); Needs You/Stale/Pinned still always float to the top regardless.
 - Hover any button, badge, or chip for a tooltip explaining it; the **?** button in
   the header opens a full glossary panel.
 
-**Detail pane (right)** — opens when you select a session:
-- Fixed header (title, status control, folder, action buttons, rough cost estimate)
-  and a fixed footer (rename, notes, tags, pin), with only the transcript itself
-  scrolling in between. Opens already scrolled to the latest messages.
-- The transcript renders basic markdown (bold/italic, inline and fenced code,
-  headers, lists, links) instead of dumping raw text, and visually distinguishes
-  your messages (🧑 You) from Claude's (🤖 Claude).
+**Detail pane (right)** — opens when you select a session (as a slide-over in Board
+view, inline in List view):
+- Fixed header: title (with an **Edit** button for rename/notes/tags/pin, in a
+  modal), status dropdown, folder (+ git branch, if any), action buttons, rough cost
+  estimate. Below it, the live terminal, then a collapsible **History** section —
+  collapsed by default but remembers your last choice, and auto-scrolls to the latest
+  message when expanded.
+- History renders basic markdown (bold/italic, inline and fenced code, headers,
+  lists, links) instead of dumping raw text, and visually distinguishes your messages
+  (🧑 You) from Claude's (🤖 Claude).
 - **Status** dropdown — picking one here marks the session "manually set" so the
   tracker stops auto-managing its status.
-- **▶️ Resume** — reopen this exact session (disabled, shows "Already open (pid N)",
-  if it's already running elsewhere).
-- **🍴 Fork** — start a brand-new session from this one's history, leaving this
+- **Resume** — left-click connects in the live terminal below (identical to clicking
+  **▶ Resume here** in that panel); right-click opens the session in a new external
+  terminal window instead, the old default. Disabled (shows "Already open (pid N)")
+  if the session is already running elsewhere.
+- **Fork** — start a brand-new session from this one's history, leaving this
   session untouched.
 - **⏭️ Continue latest in project** — not tied to the session you're viewing; runs
   Claude Code's own "continue most recent" for that project folder, so it can land on
@@ -78,21 +115,22 @@ the browser tab costs nothing extra since a browser is already running anyway.
 - Every launch action opens as a new tab in your existing terminal window rather than
   a separate window, where possible (falls back to a new window if Windows Terminal
   isn't installed).
-- **🖥️ Live terminal** — a collapsible panel under the transcript embeds a real
-  interactive `claude --resume` session in the page itself (via a server-owned
-  pseudo-terminal, rendered with [xterm.js](https://xtermjs.org/)) — no separate
-  window needed to send a follow-up prompt. Since it's a genuine interactive CLI
-  session, not a scripted one-shot, permission prompts, Esc-to-interrupt, and
-  Shift+Tab mode-switching all work exactly as they do in a real terminal.
-  Collapsing the panel detaches without ending the session (like `tmux detach`);
-  reopening it replays recent scrollback. Disabled when the session is already
-  running in an external terminal, to avoid two processes writing the same
-  transcript at once.
+- **🖥️ Live terminal** — shown by default in the detail pane, above the collapsible
+  History section: a real interactive `claude --resume` session embedded in the page
+  itself (via a server-owned pseudo-terminal, rendered with
+  [xterm.js](https://xtermjs.org/)) — no separate window needed to send a follow-up
+  prompt. Since it's a genuine interactive CLI session, not a scripted one-shot,
+  permission prompts, Esc-to-interrupt, and Shift+Tab mode-switching all work exactly
+  as they do in a real terminal. Disabled when the session is already running in an
+  external terminal, to avoid two processes writing the same transcript at once.
 
 **➕ New Session** — pick a known project or browse to a folder (scoped to configured
 allowed roots + your home folder), optional name/model/effort override, then launches
-a fresh `claude` there. It won't appear in the list until you send it a first message
-— see [⚠️ Known limitations](#️-known-limitations).
+a fresh `claude` there. **Open in this app** is checked by default — the new session
+appears selected with its live terminal already connected, no external window at all;
+uncheck it to open in a new terminal window instead, the old default. It won't appear
+in the list until you send it a first message — see
+[⚠️ Known limitations](#️-known-limitations).
 
 **🔎 Search** — ripgrep-backed full-text search across all transcripts (`/` to focus
 it), shown in a dropdown under the search box rather than a panel that covers the
@@ -112,9 +150,13 @@ lighter variant for anyone whose OS prefers light mode.
 
 - **Windows** — the terminal-spawning and window-focus mechanisms are all
   PowerShell/Win32-specific; this has not been adapted for macOS/Linux.
-- **Node.js** — tested on Node 24. No hard minimum is enforced; `better-sqlite3`
-  needs either a prebuilt binary for your Node version or a C++ toolchain to build
-  from source (see [🛠️ Troubleshooting](#️-troubleshooting)).
+- **Node.js** — tested on Node 24. No hard minimum is enforced, but `better-sqlite3`
+  and `node-pty` are both native addons — each needs either a prebuilt binary for your
+  exact Node version or a C++ toolchain to build from source, and mismatched native
+  binaries between Node versions are a common source of install/runtime errors (see
+  [🛠️ Troubleshooting](#️-troubleshooting)). If you hit crashes after switching Node
+  versions, reinstalling `node_modules` on the version you intend to run is the first
+  thing to try.
 - **Claude Code CLI** (`claude`) on PATH — this tool is a dashboard on top of it, not
   a replacement.
 - **Git** on PATH — used for the branch shown in a session's detail pane
@@ -186,10 +228,13 @@ Either way, check `GET /api/health` to confirm it's up.
   pseudo-terminal per open session (`src/ptyManager.js`), not a one-shot spawn.
 - **Frontend**: plain HTML/CSS/JS in `public/` — no framework, no bundler, no build
   step. A small hand-written markdown renderer handles transcript formatting (not a
-  library — kept dependency-free and fully offline). [xterm.js](https://xtermjs.org/)
-  is the one exception — vendored (not CDN-loaded) as a browser UMD bundle in
-  `public/vendor/xterm/` for the live-terminal panel, since a real terminal emulator
-  isn't something worth hand-rolling.
+  library — kept dependency-free and fully offline). Two assets are vendored locally
+  rather than loaded from a CDN, so the app works fully offline and never depends on a
+  third party at runtime: [xterm.js](https://xtermjs.org/) (browser UMD bundle in
+  `public/vendor/xterm/`, for the live-terminal panel — a real terminal emulator isn't
+  worth hand-rolling) and the [Inter](https://rsms.me/inter/) variable font
+  (`public/vendor/inter/`, replacing the Windows-only Segoe UI Variable Display so the
+  UI renders consistently off Windows too).
 - **External processes shelled out to**: `claude` (the CLI itself), `git` (branch
   lookup), `wt.exe`/`powershell.exe` (spawning sessions, and the live-terminal PTY),
   `rg` (search).
@@ -226,7 +271,9 @@ claude-session-tracker/
     ├── index.html                # single page: board, detail pane, modals, help panel
     ├── app.js                    # all client-side logic (SSE handling, rendering, actions)
     ├── styles.css                 # theme + layout
-    └── vendor/xterm/               # vendored xterm.js browser bundle (live-terminal panel)
+    └── vendor/
+        ├── xterm/                  # vendored xterm.js browser bundle (live-terminal panel)
+        └── inter/                  # vendored Inter variable font (the UI's sans-serif typeface)
 ```
 
 ## 🔌 API reference
@@ -347,8 +394,9 @@ run fine but never show up here. Verified directly against the actual CLI warnin
 - **Live-terminal sessions don't survive a tracker restart.** The pseudo-terminal
   lives in the server process's own memory (`src/ptyManager.js`); restarting the
   server (or its process crashing) ends every open in-app terminal, the same way
-  closing a real terminal window would. Detaching (collapsing the panel) is safe —
-  only stopping the server itself ends the session. Also, since it's a real
+  closing a real terminal window would. Navigating away (selecting a different
+  session, or closing the detail pane) is safe and just detaches the view — only
+  stopping the server itself ends the underlying session. Also, since it's a real
   terminal embedded in the page rather than an OS window, click into it before
   typing to give it keyboard focus.
 - **`npm install` also needs to build `node-pty`'s native module** (used by the

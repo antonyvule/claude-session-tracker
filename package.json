@@ -3,6 +3,19 @@
   "version": "1.0.0",
   "description": "Local kanban tracker for Claude Code CLI sessions across projects",
   "main": "server.js",
+  "license": "MIT",
+  "author": "antonyvule",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/antonyvule/claude-session-tracker.git"
+  },
+  "keywords": [
+    "claude-code",
+    "claude",
+    "session-tracker",
+    "dashboard",
+    "cli-tools"
+  ],
   "scripts": {
     "start": "node server.js"
   },
